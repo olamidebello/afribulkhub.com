@@ -1,5 +1,6 @@
 """Africa Bulk Hub. WSGI application; durable SQLite, explicit access checks."""
 import argparse
+from functools import lru_cache
 import base64
 import hashlib
 import hmac
@@ -23,6 +24,7 @@ PRAGMA journal_mode=WAL;
 CREATE TABLE IF NOT EXISTS tenants(id INTEGER PRIMARY KEY,name TEXT NOT NULL,country TEXT NOT NULL,status TEXT NOT NULL DEFAULT 'active',created INTEGER NOT NULL);
 CREATE TABLE IF NOT EXISTS users(id INTEGER PRIMARY KEY,tenant_id INTEGER NOT NULL REFERENCES tenants(id),name TEXT NOT NULL,email TEXT NOT NULL UNIQUE,password TEXT NOT NULL,role TEXT NOT NULL CHECK(role IN ('buyer','supplier','provider','tenant_admin','super_admin')),status TEXT NOT NULL DEFAULT 'active',created INTEGER NOT NULL);
 CREATE TABLE IF NOT EXISTS acceptances(id INTEGER PRIMARY KEY,user_id INTEGER NOT NULL REFERENCES users(id),terms_version TEXT NOT NULL,privacy_version TEXT NOT NULL,created INTEGER NOT NULL);
+CREATE TABLE IF NOT EXISTS user_languages(user_id INTEGER PRIMARY KEY REFERENCES users(id),language TEXT NOT NULL DEFAULT 'pcm');
 CREATE TABLE IF NOT EXISTS sessions(token TEXT PRIMARY KEY,user_id INTEGER NOT NULL REFERENCES users(id),csrf TEXT NOT NULL,expires INTEGER NOT NULL);
 CREATE TABLE IF NOT EXISTS records(id INTEGER PRIMARY KEY,kind TEXT NOT NULL,tenant_id INTEGER NOT NULL REFERENCES tenants(id),owner_id INTEGER NOT NULL REFERENCES users(id),peer_tenant INTEGER REFERENCES tenants(id),status TEXT NOT NULL,data TEXT NOT NULL,created INTEGER NOT NULL,updated INTEGER NOT NULL);
 CREATE INDEX IF NOT EXISTS record_kind ON records(kind,tenant_id);
@@ -50,6 +52,11 @@ def init_db():
         for k,v in DEFAULTS.items():
             c.execute('INSERT OR IGNORE INTO settings VALUES (?,?)',(k,json.dumps(v)))
 
+@lru_cache(maxsize=1)
+def language_codes():
+    data=json.loads((ROOT/'static/i18n/languages.json').read_text())
+    return frozenset(item['code'] for item in data['languages'])
+
 def password_hash(p):
     salt = secrets.token_hex(16)
     return salt + ':' + hashlib.scrypt(p.encode(),salt=salt.encode(),n=16384,r=8,p=1).hex()
@@ -71,7 +78,10 @@ def audit(c,u,action,rid=None):
     c.execute('INSERT INTO audit(actor_id,tenant_id,action,record_id,created) VALUES (?,?,?,?,?)',(u['id'] if u else None,u['tenant_id'] if u else None,action,rid,now()))
 def person(c,uid):
     r=c.execute('SELECT u.id,u.tenant_id,u.name,u.email,u.role,u.status,t.name company,t.country FROM users u JOIN tenants t ON t.id=u.tenant_id WHERE u.id=?',(uid,)).fetchone()
-    return dict(r) if r else None
+    if not r:return None
+    result=dict(r);preference=c.execute('SELECT language FROM user_languages WHERE user_id=?',(uid,)).fetchone()
+    result['language']=preference[0] if preference else None
+    return result
 
 def visible(u,r):
     return (r['kind'] in PUBLIC and r['status']=='published') or (u and (u['role']=='super_admin' or u['tenant_id'] in (r['tenant_id'],r['peer_tenant'])))
@@ -263,6 +273,12 @@ def api(c,env,method,path,d,q):
             pd['stock']-=qty;c.execute('UPDATE records SET data=?,updated=? WHERE id=?',(json.dumps(pd),now(),p['id']))
             orders.append(add(c,u,'order',{'product_id':p['id'],'title':pd['title'],'quantity':qty,'unit_price':pd['price'],'total':round(qty*pd['price'],2),'currency':'USD','delivery_address':address,'payment_status':'unpaid','stock_reserved':True},'pending',p['tenant_id']))
         c.execute('DELETE FROM cart WHERE user_id=?',(u['id'],));return {'items':orders},extra
+    if path=='/api/language':
+        if method=='GET':return {'language':u.get('language') or 'pcm','default':'pcm'},extra
+        require(method=='PATCH','Method not allowed',405)
+        code=clean(d.get('language'),50);require(code in language_codes(),'Unknown language code',400)
+        c.execute('INSERT INTO user_languages VALUES (?,?) ON CONFLICT(user_id) DO UPDATE SET language=excluded.language',(u['id'],code))
+        audit(c,u,'language:update');return {'language':code,'default':'pcm'},extra
     if path=='/api/profile' and method=='PATCH':
         require(clean(d.get('name')),'Name required',400)
         c.execute('UPDATE users SET name=? WHERE id=?',(clean(d['name']),u['id']))

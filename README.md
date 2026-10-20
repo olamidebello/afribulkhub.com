@@ -124,3 +124,11 @@ Validation for this release: 19 website/backend integration tests and two Apps S
 ### Recovery from the Africa Atona port conflict
 
 Port 8097 is occupied by Africa Atona on the supplied server. Deployment now defaults to `hub_port=0` (automatic selection), persists its own port, and uses that same value in Gunicorn, the dedicated Nginx vhost and the panel snapshot. Rerun the original `ansible-pull` command to recover. Existing administrators and application data are preserved. The failed initial attempt stopped before creating its Nginx host; no Atona restart or configuration change is needed.
+
+## African languages and Pidgin default
+
+The site and Android website client default to Nigerian Pidgin (`pcm`) for new visitors. The top-bar language selector searches **6,577 documented language/dialect entries**, combining Glottolog African records with CLDR territory data. A manually authored Pidgin dictionary covers core marketplace screens, forms and actions; English is available and is the explicit fallback for entries whose interfaces are not translated. Catalog inclusion does not imply full translation. Some copy, legal pages and native Android controls remain English. User business content and messages are not translated.
+
+Browser choices survive reload through localStorage. Signed-in language preferences are scoped to each user, stored in the database and restored when signing in elsewhere. The deployment's existing schema-initialization step adds the preference table safely. Existing accounts and records are preserved. The web update applies in the Android client without replacing its signed APK. Attribution, licensing and catalog details are in `static/i18n/NOTICE.md`.
+
+Deploy with the same `ansible-pull` command above. This release retains automatic port selection, including protection of Atona on 8097.
