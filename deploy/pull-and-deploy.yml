@@ -6,7 +6,7 @@
     hub_source: /opt/afribulkhub-source
     hub_email: dobcalldemo@gmail.com
     hub_publish_store: true
-    hub_port: 8097
+    hub_port: 0
     hub_store_source: /opt/afribulkhub-store-release
   tasks:
     - name: Install pull and deployment tools

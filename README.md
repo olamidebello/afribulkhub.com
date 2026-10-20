@@ -56,7 +56,7 @@ cd /opt/afribulkhub-source
 sudo ansible-playbook -i localhost, -c local deploy/deploy.yml -e hub_email=YOUR_REAL_EMAIL
 ```
 
-The playbook uses loopback port **8097**. Check this port is free before the first deployment; select another with `-e hub_port=PORT` if required. Subsequent deployments refuse an existing dedicated vhost whose port differs. It requires DNS pointing to the server and public ports 80/443 for certificate issuance. `www` is not provisioned; add it intentionally with matching DNS/certificate/vhost configuration if required. Existing dedicated vhosts are retained to preserve Certbot edits. On first install, inspect for duplicate `server_name afribulkhub.com` declarations in other Nginx vhosts before deploying.
+The deployment automatically selects a free loopback port in **18770–18869** and preserves it in `/var/lib/afribulkhub/listen-port.json`. It reuses a healthy existing Africa Bulk Hub listener and never stops or takes over another application. Set `-e hub_port=PORT` to require a particular port; an occupied foreign port fails explicitly. The dedicated domain proxy follows the selected port while retaining TLS settings. It requires DNS pointing to the server and public ports 80/443 for certificate issuance. `www` is not provisioned; add it intentionally with matching DNS/certificate/vhost configuration if required. Existing dedicated vhosts are retained to preserve Certbot edits. On first install, inspect for duplicate `server_name afribulkhub.com` declarations in other Nginx vhosts before deploying.
 
 By default the playbook creates one initial super administrator only when none exists. Its generated credentials are root-only at `/var/lib/afribulkhub-bootstrap/initial-admin.json`; existing administrators and passwords are preserved. Set `-e hub_bootstrap_admin=false` to manage this manually. Manual creation:
 
@@ -120,3 +120,7 @@ This pulls the source, deploys the service, verifies HTTPS/legal pages/APK, prov
 The paired store playbook is `olamidebello/africanappsstore:ansible/deploy-afribulkhub-mobile.yml`. The future public store link is `https://africanappsstore.space/#Hosted%20apps`; its APK path is `/downloads/africa-bulk-hub.apk`. Repository publication is separate from running these playbooks on the live host. No live deployment, DNS, certificate or Android device runtime success is inferred from the local build.
 
 Validation for this release: 19 website/backend integration tests and two Apps Store release tests passed. APK signature v2/v3, package/version, ZIP structure, alignment and SHA-256 were checked. JavaScript and Python syntax checks passed; deployment YAML parsed locally. Live Ansible execution, public URLs and Android device behavior remain unverified.
+
+### Recovery from the Africa Atona port conflict
+
+Port 8097 is occupied by Africa Atona on the supplied server. Deployment now defaults to `hub_port=0` (automatic selection), persists its own port, and uses that same value in Gunicorn, the dedicated Nginx vhost and the panel snapshot. Rerun the original `ansible-pull` command to recover. Existing administrators and application data are preserved. The failed initial attempt stopped before creating its Nginx host; no Atona restart or configuration change is needed.

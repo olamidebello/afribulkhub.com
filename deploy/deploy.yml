@@ -4,7 +4,7 @@
   become: true
   vars:
     hub_domain: afribulkhub.com
-    hub_port: 8097
+    hub_port: 0
     hub_install: /opt/afribulkhub
     hub_data: /var/lib/afribulkhub
     hub_email: dobcalldemo@gmail.com
@@ -16,7 +16,7 @@
       ansible.builtin.assert:
         that:
           - hub_domain is match('^[a-z0-9][a-z0-9.-]+\.[a-z]{2,}$')
-          - hub_port | int > 1024
+          - hub_port | int == 0 or hub_port | int > 1024
           - hub_port | int < 65536
           - not hub_https or hub_email | length > 3
         fail_msg: Set hub_email for certificate notices, or explicitly disable hub_https for local preparation only.
@@ -43,6 +43,18 @@
         - {path: '{{ hub_install }}', owner: root, mode: '0755'}
         - {path: '{{ hub_install }}/static', owner: root, mode: '0755'}
         - {path: '{{ hub_data }}', owner: afribulkhub, mode: '0700'}
+    - name: Select a free backend port without interfering with hosted applications
+      ansible.builtin.script:
+        cmd: '../tools/select_port.py --preferred {{ hub_port | int }} --saved {{ (hub_data ~ "/listen-port.json") | quote }} --vhost /etc/nginx/sites-available/afribulkhub.conf --domain {{ hub_domain | quote }}'
+        executable: python3
+      register: hub_port_selection
+      changed_when: false
+    - name: Use selected backend consistently for service, proxy and panel
+      ansible.builtin.set_fact:
+        hub_bind_port: '{{ (hub_port_selection.stdout | from_json).port | int }}'
+    - name: Report selected Africa Bulk Hub port
+      ansible.builtin.debug:
+        msg: 'Africa Bulk Hub backend: 127.0.0.1:{{ hub_bind_port }}. Existing application listeners are preserved.'
     - name: Inspect existing database
       ansible.builtin.stat:
         path: '{{ hub_data }}/hub.db'
@@ -112,7 +124,7 @@
           Environment=ABH_DATABASE={{ hub_data }}/hub.db
           Environment=ABH_SECURE_COOKIE=1
           UMask=0077
-          ExecStart={{ hub_install }}/venv/bin/gunicorn --bind 127.0.0.1:{{ hub_port }} --workers 2 --threads 4 --timeout 45 --access-logfile - app:application
+          ExecStart={{ hub_install }}/venv/bin/gunicorn --bind 127.0.0.1:{{ hub_bind_port }} --workers 2 --threads 4 --timeout 45 --access-logfile - app:application
           Restart=on-failure
           NoNewPrivileges=true
           PrivateTmp=true
@@ -121,6 +133,13 @@
           ReadWritePaths={{ hub_data }}
           [Install]
           WantedBy=multi-user.target
+    - name: Load the updated dedicated service unit
+      ansible.builtin.systemd:
+        daemon_reload: true
+    - name: Clear previous Hub startup failures after port recovery
+      ansible.builtin.command:
+        argv: [systemctl, reset-failed, afribulkhub.service]
+      changed_when: false
     - name: Restart application with updated code
       ansible.builtin.systemd:
         name: afribulkhub
@@ -129,26 +148,30 @@
         daemon_reload: true
     - name: Verify local backend
       ansible.builtin.uri:
-        url: 'http://127.0.0.1:{{ hub_port }}/api/health'
+        url: 'http://127.0.0.1:{{ hub_bind_port }}/api/health'
         return_content: true
       register: backend
       retries: 5
       delay: 2
       until: backend.status == 200 and backend.json.service | default('') == 'afribulkhub'
       failed_when: backend.status != 200 or backend.json.service | default('') != 'afribulkhub'
+    - name: Preserve selected port for repeat deployments
+      ansible.builtin.copy:
+        dest: '{{ hub_data }}/listen-port.json'
+        owner: root
+        group: afribulkhub
+        mode: '0640'
+        content: '{{ {"port": hub_bind_port | int} | to_nice_json }}'
     - name: Inspect existing dedicated vhost
       ansible.builtin.stat:
         path: /etc/nginx/sites-available/afribulkhub.conf
       register: hub_vhost
-    - name: Read existing vhost to preserve certificates
-      ansible.builtin.slurp:
-        src: /etc/nginx/sites-available/afribulkhub.conf
-      register: hub_existing
-      when: hub_vhost.stat.exists
-    - name: Validate that the existing vhost targets this backend
-      ansible.builtin.assert:
-        that: "('127.0.0.1:' ~ (hub_port | string)) in (hub_existing.content | b64decode)"
-        fail_msg: Existing dedicated vhost points to a different port. Review it before changing this deployment.
+    - name: Update only the dedicated domain backend while preserving TLS
+      ansible.builtin.replace:
+        path: /etc/nginx/sites-available/afribulkhub.conf
+        regexp: '(proxy_pass\s+http://127\.0\.0\.1:)\d+(\s*;)'
+        replace: '\g<1>{{ hub_bind_port }}\g<2>'
+        backup: true
       when: hub_vhost.stat.exists
     - name: Create dedicated vhost without altering other hosted domains
       ansible.builtin.copy:
@@ -161,7 +184,7 @@
               server_name {{ hub_domain }};
               client_max_body_size 3m;
               location / {
-                  proxy_pass http://127.0.0.1:{{ hub_port }};
+                  proxy_pass http://127.0.0.1:{{ hub_bind_port }};
                   proxy_set_header Host $host;
                   proxy_set_header X-Real-IP $remote_addr;
                   proxy_set_header X-Forwarded-Proto $scheme;
@@ -205,7 +228,7 @@
         owner: afribulkhub
         group: afribulkhub
         mode: '0600'
-        content: '{{ {"domain": hub_domain, "service": "afribulkhub", "port": hub_port, "health": "/api/health", "https_verified": hub_https, "repository": "olamidebello/afribulkhub.com"} | to_nice_json }}'
+        content: '{{ {"domain": hub_domain, "service": "afribulkhub", "port": hub_bind_port | int, "health": "/api/health", "https_verified": hub_https, "repository": "olamidebello/afribulkhub.com"} | to_nice_json }}'
     - name: Verify public legal pages and mobile download
       ansible.builtin.uri:
         url: 'https://{{ hub_domain }}{{ item }}'
