@@ -285,7 +285,7 @@ def api(c,env,method,path,d,q):
         return {'ok':True},extra
     if path=='/api/records' and method=='POST':
         kind=d.get('kind');require(kind in KINDS,'Unknown module',400)
-        data=d.get('data',{});peer=None
+        data=d.get('data',{});require(isinstance(data,dict),'Expected record fields object',400);peer=None
         if kind in {'product','campaign'}:require(u['role'] in {'supplier','tenant_admin','super_admin'},'Supplier account required')
         if kind in {'product','rfq','job','ticket','verification','campaign','address'}:
             return add(c,u,kind,sanitize(kind,data),'pending' if kind in {'product','verification','campaign'} else ('published' if kind in {'rfq','job'} else 'open')),extra
@@ -330,6 +330,7 @@ def api(c,env,method,path,d,q):
             c.execute('UPDATE records SET status=?,updated=? WHERE id=?',('archived',now(),r['id']));audit(c,u,'archive:'+r['kind'],r['id'])
         elif 'data' in d:
             require((own or admin) and r['kind'] in {'product','rfq','job','address','campaign'},'Record cannot be edited')
+            require(isinstance(d['data'],dict),'Expected record fields object',400)
             data=sanitize(r['kind'],d['data'])
             c.execute('UPDATE records SET data=?,status=?,updated=? WHERE id=?',(json.dumps(data),'pending' if r['kind']=='product' else r['status'],now(),r['id']));audit(c,u,'edit:'+r['kind'],r['id'])
         else:
@@ -414,7 +415,12 @@ def application(env,start_response):
             require(isinstance(d,dict),'Expected JSON object',400)
             if method=='POST' and path in {'/api/register','/api/login','/api/recover','/api/reset'}:
                 with connect() as limiter:
-                    limit(limiter,'auth:'+env.get('REMOTE_ADDR','unknown'),40)
+                    client_ip=env.get('REMOTE_ADDR','unknown')
+                    if client_ip in {'127.0.0.1','::1'} and env.get('HTTP_X_REAL_IP'):
+                        import ipaddress
+                        try:client_ip=str(ipaddress.ip_address(env['HTTP_X_REAL_IP']))
+                        except ValueError:pass
+                    limit(limiter,'auth:'+client_ip,40)
             c=connect();c.execute('BEGIN IMMEDIATE' if method!='GET' else 'BEGIN')
             try:
                 result,extra=api(c,env,method,path,d,parse_qs(env.get('QUERY_STRING','')));c.commit()

@@ -161,6 +161,17 @@ class MarketplaceTests(unittest.TestCase):
         store=Client().req('/api/stores/'+str(p['tenant_id']))
         self.assertEqual(store[0],200);self.assertEqual(len(store[1]['products']),1)
         self.assertNotIn('email',store[1]['store'])
+    def test_recovery_code_is_single_use_and_invalidates_sessions(self):
+        import hashlib
+        uid=self.buyer.req('/api/session')[1]['user']['id']
+        with app.connect() as db:
+            db.execute('INSERT INTO resets VALUES (?,?,?)',(hashlib.sha256(b'single-use-code').hexdigest(),uid,app.now()+60))
+        c=Client()
+        code,result=c.req('/api/reset','POST',{'token':'single-use-code','password':'reset-new-password'})
+        self.assertEqual(code,200)
+        self.assertEqual(c.req('/api/reset','POST',{'token':'single-use-code','password':'other-new-password'})[0],400)
+        self.assertIsNone(self.buyer.req('/api/session')[1]['user'])
+        self.assertEqual(c.req('/api/login','POST',{'email':'buyer@test.com','password':'reset-new-password'})[0],200)
     def test_rate_limit_persists_on_failed_login(self):
         bad=Client()
         for i in range(40):self.assertEqual(bad.req('/api/login','POST',{'email':'no@test.com','password':'bad'})[0],401)
