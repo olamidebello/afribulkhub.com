@@ -7,7 +7,9 @@
     hub_port: 8097
     hub_install: /opt/afribulkhub
     hub_data: /var/lib/afribulkhub
-    hub_email: ''
+    hub_email: dobcalldemo@gmail.com
+    hub_bootstrap_admin: true
+    hub_admin_email: '{{ hub_email }}'
     hub_https: true
   tasks:
     - name: Validate deployment variables
@@ -64,9 +66,19 @@
       loop:
         - {src: '../app.py', dest: '{{ hub_install }}/app.py'}
         - {src: '../requirements.txt', dest: '{{ hub_install }}/requirements.txt'}
-        - {src: '../static/index.html', dest: '{{ hub_install }}/static/index.html'}
-        - {src: '../static/app.js', dest: '{{ hub_install }}/static/app.js'}
-        - {src: '../static/style.css', dest: '{{ hub_install }}/static/style.css'}
+    - name: Install website branding, legal pages and verified mobile release
+      ansible.builtin.copy:
+        src: ../static/
+        dest: '{{ hub_install }}/static/'
+        owner: root
+        group: root
+        mode: '0644'
+        directory_mode: '0755'
+    - name: Verify installed Android release checksum
+      ansible.builtin.command:
+        argv: [sha256sum, -c, africa-bulk-hub.apk.sha256]
+        chdir: '{{ hub_install }}/static/downloads'
+      changed_when: false
     - name: Install WSGI runtime in virtual environment
       ansible.builtin.pip:
         requirements: '{{ hub_install }}/requirements.txt'
@@ -79,6 +91,12 @@
         ABH_DATABASE: '{{ hub_data }}/hub.db'
       become_user: afribulkhub
       changed_when: false
+    - name: Provision initial super administrator without exposing credentials
+      ansible.builtin.script:
+        cmd: '../tools/bootstrap_admin.py --email {{ hub_admin_email | quote }} --install {{ hub_install | quote }} --database {{ (hub_data ~ "/hub.db") | quote }}'
+        executable: python3
+      when: hub_bootstrap_admin
+      no_log: true
     - name: Install restricted service
       ansible.builtin.copy:
         dest: /etc/systemd/system/afribulkhub.service
@@ -116,7 +134,8 @@
       register: backend
       retries: 5
       delay: 2
-      until: backend.status == 200
+      until: backend.status == 200 and backend.json.service | default('') == 'afribulkhub'
+      failed_when: backend.status != 200 or backend.json.service | default('') != 'afribulkhub'
     - name: Inspect existing dedicated vhost
       ansible.builtin.stat:
         path: /etc/nginx/sites-available/afribulkhub.conf
@@ -187,6 +206,21 @@
         group: afribulkhub
         mode: '0600'
         content: '{{ {"domain": hub_domain, "service": "afribulkhub", "port": hub_port, "health": "/api/health", "https_verified": hub_https, "repository": "olamidebello/afribulkhub.com"} | to_nice_json }}'
-    - name: Explain first administrator provisioning
+    - name: Verify public legal pages and mobile download
+      ansible.builtin.uri:
+        url: 'https://{{ hub_domain }}{{ item }}'
+        method: HEAD
+        validate_certs: true
+        status_code: 200
+      loop: [/terms, /privacy, /copyright, /downloads/africa-bulk-hub.apk, /downloads/release.json]
+      when: hub_https
+    - name: Merge verified hosting into Olamidepanel GUI snapshot
+      ansible.builtin.script:
+        cmd: '../tools/register_panel.py --status {{ (hub_data ~ "/hosting-status.json") | quote }}'
+        executable: python3
+      when: hub_https
+      register: panel_registration
+      changed_when: "'UPDATED' in panel_registration.stdout"
+    - name: Report initial administrator location
       ansible.builtin.debug:
-        msg: 'Create your administrator using the secure interactive command in README.md. No default account is installed.'
+        msg: 'Existing administrators are preserved. Newly generated credentials, if any, are root-only at /var/lib/afribulkhub-bootstrap/initial-admin.json.'

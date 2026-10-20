@@ -9,3 +9,8 @@ data/
 *.pem
 *.key
 *.zip
+mobile/build/
+*.jks
+*.keystore
+*.idsig
+private-signing/

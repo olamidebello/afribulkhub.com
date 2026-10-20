@@ -22,6 +22,7 @@ SCHEMA = '''
 PRAGMA journal_mode=WAL;
 CREATE TABLE IF NOT EXISTS tenants(id INTEGER PRIMARY KEY,name TEXT NOT NULL,country TEXT NOT NULL,status TEXT NOT NULL DEFAULT 'active',created INTEGER NOT NULL);
 CREATE TABLE IF NOT EXISTS users(id INTEGER PRIMARY KEY,tenant_id INTEGER NOT NULL REFERENCES tenants(id),name TEXT NOT NULL,email TEXT NOT NULL UNIQUE,password TEXT NOT NULL,role TEXT NOT NULL CHECK(role IN ('buyer','supplier','provider','tenant_admin','super_admin')),status TEXT NOT NULL DEFAULT 'active',created INTEGER NOT NULL);
+CREATE TABLE IF NOT EXISTS acceptances(id INTEGER PRIMARY KEY,user_id INTEGER NOT NULL REFERENCES users(id),terms_version TEXT NOT NULL,privacy_version TEXT NOT NULL,created INTEGER NOT NULL);
 CREATE TABLE IF NOT EXISTS sessions(token TEXT PRIMARY KEY,user_id INTEGER NOT NULL REFERENCES users(id),csrf TEXT NOT NULL,expires INTEGER NOT NULL);
 CREATE TABLE IF NOT EXISTS records(id INTEGER PRIMARY KEY,kind TEXT NOT NULL,tenant_id INTEGER NOT NULL REFERENCES tenants(id),owner_id INTEGER NOT NULL REFERENCES users(id),peer_tenant INTEGER REFERENCES tenants(id),status TEXT NOT NULL,data TEXT NOT NULL,created INTEGER NOT NULL,updated INTEGER NOT NULL);
 CREATE INDEX IF NOT EXISTS record_kind ON records(kind,tenant_id);
@@ -154,6 +155,7 @@ def api(c,env,method,path,d,q):
         require(method=='POST','Method not allowed',405)
         email=clean(d.get('email')).lower()
         if path=='/api/register':
+            require(d.get('accept_terms') is True,'Agree to the Terms and acknowledge the Privacy Policy to register',400)
             require(settings(c)['registration_enabled'],'Registration is currently closed')
             require(re.fullmatch(r'[^\s@]+@[^\s@]+\.[^\s@]+',email),'Valid email required',400)
             require(len(d.get('password',''))>=12,'Password must have at least 12 characters',400)
@@ -162,6 +164,7 @@ def api(c,env,method,path,d,q):
             require(not c.execute('SELECT id FROM users WHERE email=?',(email,)).fetchone(),'Email already registered',409)
             tid=c.execute('INSERT INTO tenants(name,country,created) VALUES (?,?,?)',(clean(d['company']),clean(d.get('country') or 'Nigeria'),now())).lastrowid
             uid=c.execute('INSERT INTO users(tenant_id,name,email,password,role,created) VALUES (?,?,?,?,?,?)',(tid,clean(d['name']),email,password_hash(d['password']),d['role'],now())).lastrowid
+            c.execute('INSERT INTO acceptances(user_id,terms_version,privacy_version,created) VALUES (?,?,?,?)',(uid,'2026-10-20','2026-10-20',now()))
             audit(c,person(c,uid),'register')
             return login(c,person(c,uid))
         if path=='/api/login':
@@ -429,9 +432,10 @@ def application(env,start_response):
                 c.rollback();raise
             body=json.dumps(result).encode()
         else:
-            require(method=='GET','Method not allowed',405)
+            require(method in {'GET','HEAD'},'Method not allowed',405)
             file=(ROOT/'static'/path.lstrip('/')).resolve()
-            if path=='/' or not Path(path).suffix:file=ROOT/'static'/'index.html'
+            if path in {'/terms','/privacy','/copyright'}:file=ROOT/'static'/'legal'/(path[1:]+'.html')
+            elif path=='/' or not Path(path).suffix:file=ROOT/'static'/'index.html'
             require(file.is_relative_to((ROOT/'static').resolve()) and file.is_file(),'Not found',404)
             body=file.read_bytes();ctype=mimetypes.guess_type(file)[0] or 'application/octet-stream'
     except Error as e:
@@ -444,7 +448,7 @@ def application(env,start_response):
         if c:c.close()
     headers=[('Content-Type',ctype),('Content-Length',str(len(body))),('X-Content-Type-Options','nosniff'),('X-Frame-Options','DENY'),('Referrer-Policy','same-origin'),('Content-Security-Policy',"default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'self'; frame-ancestors 'none'; base-uri 'self'; form-action 'self'"),('Cache-Control','no-store' if env.get('PATH_INFO','').startswith('/api/') else 'no-cache')]+extra
     start_response(str(status)+' '+{200:'OK',400:'Bad Request',401:'Unauthorized',403:'Forbidden',404:'Not Found',405:'Method Not Allowed',409:'Conflict',413:'Payload Too Large',429:'Too Many Requests',500:'Internal Server Error'}.get(status,'Error'),headers)
-    return [body]
+    return [b'' if env.get('REQUEST_METHOD')=='HEAD' else body]
 
 
 def main():

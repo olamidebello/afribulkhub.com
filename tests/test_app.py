@@ -25,7 +25,7 @@ class Client:
         if isinstance(val,dict) and 'csrf' in val:self.csrf=val['csrf'] or ''
         return status[0],val
     def register(self,email,role='buyer'):
-        return self.req('/api/register','POST',{'email':email,'password':'a-secure-password!','name':email.split('@')[0],'company':email,'country':'Nigeria','role':role})
+        return self.req('/api/register','POST',{'email':email,'password':'a-secure-password!','name':email.split('@')[0],'company':email,'country':'Nigeria','role':role,'accept_terms':True})
     def add(self,kind,**data):return self.req('/api/records','POST',{'kind':kind,'data':data})
 
 class MarketplaceTests(unittest.TestCase):

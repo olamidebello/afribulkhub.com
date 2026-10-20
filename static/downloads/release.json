@@ -1,0 +1,21 @@
+{
+  "name": "Africa Bulk Hub",
+  "slogan": "Connecting Africa. Trading Beyond.",
+  "package": "com.afribulkhub.mobile",
+  "version": "1.0.0",
+  "version_code": 1,
+  "min_android": "8.0",
+  "category": "Business",
+  "website": "https://afribulkhub.com/",
+  "privacy": "https://afribulkhub.com/privacy",
+  "terms": "https://afribulkhub.com/terms",
+  "copyright": "https://afribulkhub.com/copyright",
+  "channel": "direct",
+  "status": "built_hosting_pending",
+  "description": "Africa Bulk Hub dedicated HTTPS marketplace client. Source wholesale products, manage RFQs and orders, and connect for service work. Internet and an operational website required. No offline trading or native push notifications. Use Browser for unsupported downloads.",
+  "apk_url": "https://africanappsstore.space/downloads/africa-bulk-hub.apk",
+  "website_apk_url": "https://afribulkhub.com/downloads/africa-bulk-hub.apk",
+  "sha256": "9d43044632a1ed09d9f9d3b4d92daf3ec94b19e75eb45f3c71581487f09f141c",
+  "size_bytes": 270819,
+  "signing": "Persistent private publisher key; no private signing material in repository"
+}

@@ -1,0 +1,46 @@
+---
+- name: Pull and deploy Africa Bulk Hub and its African Apps Store release
+  hosts: all
+  become: true
+  vars:
+    hub_source: /opt/afribulkhub-source
+    hub_email: dobcalldemo@gmail.com
+    hub_publish_store: true
+    hub_port: 8097
+    hub_store_source: /opt/afribulkhub-store-release
+  tasks:
+    - name: Install pull and deployment tools
+      ansible.builtin.apt:
+        name: [git, ansible, python3]
+        state: present
+        update_cache: true
+    - name: Pull marketplace without discarding source edits
+      ansible.builtin.git:
+        repo: https://github.com/olamidebello/afribulkhub.com.git
+        dest: '{{ hub_source }}'
+        version: main
+        force: false
+    - name: Run complete website hosting deployment on the target
+      ansible.builtin.command:
+        argv:
+          - ansible-playbook
+          - -i
+          - localhost,
+          - -c
+          - local
+          - '{{ hub_source }}/deploy/deploy.yml'
+          - -e
+          - '{{ {"hub_email": hub_email, "hub_port": hub_port} | to_json }}'
+      changed_when: true
+    - name: Pull Apps Store integration without discarding source edits
+      ansible.builtin.git:
+        repo: https://github.com/olamidebello/africanappsstore.git
+        dest: '{{ hub_store_source }}'
+        version: main
+        force: false
+      when: hub_publish_store
+    - name: Publish signed APK and branded listing to existing Apps Store
+      ansible.builtin.command:
+        argv: [ansible-playbook, -i, 'localhost,', -c, local, '{{ hub_store_source }}/ansible/deploy-afribulkhub-mobile.yml']
+      when: hub_publish_store
+      changed_when: true
