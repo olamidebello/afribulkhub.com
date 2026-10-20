@@ -1,0 +1,192 @@
+---
+- name: Install Africa Bulk Hub alongside Olamidepanel
+  hosts: all
+  become: true
+  vars:
+    hub_domain: afribulkhub.com
+    hub_port: 8097
+    hub_install: /opt/afribulkhub
+    hub_data: /var/lib/afribulkhub
+    hub_email: ''
+    hub_https: true
+  tasks:
+    - name: Validate deployment variables
+      ansible.builtin.assert:
+        that:
+          - hub_domain is match('^[a-z0-9][a-z0-9.-]+\.[a-z]{2,}$')
+          - hub_port | int > 1024
+          - hub_port | int < 65536
+          - not hub_https or hub_email | length > 3
+        fail_msg: Set hub_email for certificate notices, or explicitly disable hub_https for local preparation only.
+    - name: Install runtime packages
+      ansible.builtin.apt:
+        name: [python3, python3-venv, nginx, certbot, python3-certbot-nginx]
+        state: present
+        update_cache: true
+    - name: Create isolated runtime user
+      ansible.builtin.user:
+        name: afribulkhub
+        system: true
+        home: '{{ hub_data }}'
+        shell: /usr/sbin/nologin
+        create_home: false
+    - name: Create root-owned application and private data directories
+      ansible.builtin.file:
+        path: '{{ item.path }}'
+        state: directory
+        owner: '{{ item.owner }}'
+        group: afribulkhub
+        mode: '{{ item.mode }}'
+      loop:
+        - {path: '{{ hub_install }}', owner: root, mode: '0755'}
+        - {path: '{{ hub_install }}/static', owner: root, mode: '0755'}
+        - {path: '{{ hub_data }}', owner: afribulkhub, mode: '0700'}
+    - name: Inspect existing database
+      ansible.builtin.stat:
+        path: '{{ hub_data }}/hub.db'
+      register: hub_db
+    - name: Back up database consistently before application update
+      ansible.builtin.command:
+        argv:
+          - python3
+          - -c
+          - "import sqlite3,time; s=sqlite3.connect('{{ hub_data }}/hub.db'); d=sqlite3.connect('{{ hub_data }}/predeploy-'+str(int(time.time()))+'.db'); s.backup(d); d.close(); s.close()"
+      become_user: afribulkhub
+      when: hub_db.stat.exists
+      changed_when: true
+    - name: Install application files from reviewed checkout
+      ansible.builtin.copy:
+        src: '{{ item.src }}'
+        dest: '{{ item.dest }}'
+        owner: root
+        group: root
+        mode: '0644'
+      loop:
+        - {src: '../app.py', dest: '{{ hub_install }}/app.py'}
+        - {src: '../requirements.txt', dest: '{{ hub_install }}/requirements.txt'}
+        - {src: '../static/index.html', dest: '{{ hub_install }}/static/index.html'}
+        - {src: '../static/app.js', dest: '{{ hub_install }}/static/app.js'}
+        - {src: '../static/style.css', dest: '{{ hub_install }}/static/style.css'}
+    - name: Install WSGI runtime in virtual environment
+      ansible.builtin.pip:
+        requirements: '{{ hub_install }}/requirements.txt'
+        virtualenv: '{{ hub_install }}/venv'
+        virtualenv_command: python3 -m venv
+    - name: Initialize schema without demo users or default credentials
+      ansible.builtin.command:
+        argv: ['{{ hub_install }}/venv/bin/python', '{{ hub_install }}/app.py', init]
+      environment:
+        ABH_DATABASE: '{{ hub_data }}/hub.db'
+      become_user: afribulkhub
+      changed_when: false
+    - name: Install restricted service
+      ansible.builtin.copy:
+        dest: /etc/systemd/system/afribulkhub.service
+        mode: '0644'
+        content: |
+          [Unit]
+          Description=Africa Bulk Hub marketplace
+          After=network.target
+          [Service]
+          User=afribulkhub
+          Group=afribulkhub
+          WorkingDirectory={{ hub_install }}
+          Environment=ABH_DATABASE={{ hub_data }}/hub.db
+          Environment=ABH_SECURE_COOKIE=1
+          UMask=0077
+          ExecStart={{ hub_install }}/venv/bin/gunicorn --bind 127.0.0.1:{{ hub_port }} --workers 2 --threads 4 --timeout 45 --access-logfile - app:application
+          Restart=on-failure
+          NoNewPrivileges=true
+          PrivateTmp=true
+          ProtectSystem=strict
+          ProtectHome=true
+          ReadWritePaths={{ hub_data }}
+          [Install]
+          WantedBy=multi-user.target
+    - name: Restart application with updated code
+      ansible.builtin.systemd:
+        name: afribulkhub
+        state: restarted
+        enabled: true
+        daemon_reload: true
+    - name: Verify local backend
+      ansible.builtin.uri:
+        url: 'http://127.0.0.1:{{ hub_port }}/api/health'
+        return_content: true
+      register: backend
+      retries: 5
+      delay: 2
+      until: backend.status == 200
+    - name: Inspect existing dedicated vhost
+      ansible.builtin.stat:
+        path: /etc/nginx/sites-available/afribulkhub.conf
+      register: hub_vhost
+    - name: Read existing vhost to preserve certificates
+      ansible.builtin.slurp:
+        src: /etc/nginx/sites-available/afribulkhub.conf
+      register: hub_existing
+      when: hub_vhost.stat.exists
+    - name: Validate that the existing vhost targets this backend
+      ansible.builtin.assert:
+        that: "('127.0.0.1:' ~ (hub_port | string)) in (hub_existing.content | b64decode)"
+        fail_msg: Existing dedicated vhost points to a different port. Review it before changing this deployment.
+      when: hub_vhost.stat.exists
+    - name: Create dedicated vhost without altering other hosted domains
+      ansible.builtin.copy:
+        dest: /etc/nginx/sites-available/afribulkhub.conf
+        force: false
+        mode: '0644'
+        content: |
+          server {
+              listen 80;
+              server_name {{ hub_domain }};
+              client_max_body_size 3m;
+              location / {
+                  proxy_pass http://127.0.0.1:{{ hub_port }};
+                  proxy_set_header Host $host;
+                  proxy_set_header X-Real-IP $remote_addr;
+                  proxy_set_header X-Forwarded-Proto $scheme;
+                  proxy_read_timeout 45s;
+              }
+          }
+    - name: Permit bounded specification and evidence uploads in the dedicated vhost
+      ansible.builtin.replace:
+        path: /etc/nginx/sites-available/afribulkhub.conf
+        regexp: 'client_max_body_size 100k;'
+        replace: 'client_max_body_size 3m;'
+    - name: Enable dedicated domain
+      ansible.builtin.file:
+        src: /etc/nginx/sites-available/afribulkhub.conf
+        dest: /etc/nginx/sites-enabled/afribulkhub.conf
+        state: link
+    - name: Validate nginx
+      ansible.builtin.command: nginx -t
+      changed_when: false
+    - name: Reload nginx
+      ansible.builtin.systemd:
+        name: nginx
+        state: reloaded
+        enabled: true
+    - name: Obtain or renew domain certificate using existing DNS
+      ansible.builtin.command:
+        argv: [certbot, --nginx, --non-interactive, --agree-tos, --email, '{{ hub_email }}', -d, '{{ hub_domain }}', --redirect, --keep-until-expiring]
+      when: hub_https
+      changed_when: false
+    - name: Verify trusted HTTPS and application routing
+      ansible.builtin.uri:
+        url: 'https://{{ hub_domain }}/api/health'
+        validate_certs: true
+        return_content: true
+      when: hub_https
+      register: public_health
+      failed_when: public_health.status != 200 or public_health.json.service != 'afribulkhub'
+    - name: Record verified deployment metadata for panel integration
+      ansible.builtin.copy:
+        dest: '{{ hub_data }}/hosting-status.json'
+        owner: afribulkhub
+        group: afribulkhub
+        mode: '0600'
+        content: '{{ {"domain": hub_domain, "service": "afribulkhub", "port": hub_port, "health": "/api/health", "https_verified": hub_https, "repository": "olamidebello/afribulkhub.com"} | to_nice_json }}'
+    - name: Explain first administrator provisioning
+      ansible.builtin.debug:
+        msg: 'Create your administrator using the secure interactive command in README.md. No default account is installed.'

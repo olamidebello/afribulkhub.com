@@ -1,0 +1,11 @@
+__pycache__/
+*.pyc
+data/
+.venv/
+.env
+*.db
+*.db-wal
+*.db-shm
+*.pem
+*.key
+*.zip
