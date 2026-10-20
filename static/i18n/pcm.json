@@ -275,5 +275,14 @@
   "Create sourcing request": "Post wetin you need",
   "Create service work order": "Post new work",
   "Create support ticket": "Ask for help",
-  "Create delivery address": "Add where to deliver"
+  "Create delivery address": "Add where to deliver",
+  "Currency": "Currency",
+  "Unit price": "Price for one",
+  "Budget": "Budget",
+  "Your fee": "Your fee",
+  "Product subtotals": "Product subtotals",
+  "Amounts in different currencies are not combined or converted.": "We no dey join or convert amounts wey get different currencies.",
+  "Unsupported currency": "We no support this currency",
+  "AFR is a proposed custom pricing unit.": "AFR na proposed custom unit for price.",
+  "Afira (AFR) is a proposed custom pricing unit. No payment or redemption service is provided.": "Afira (AFR) na proposed custom unit for price. We no dey collect payment or change am to cash."
 }

@@ -1,0 +1,10 @@
+const fs=require('node:fs'),vm=require('node:vm'),assert=require('node:assert/strict');
+const source=fs.readFileSync('static/app.js','utf8');
+const start=source.indexOf('const money='),end=source.indexOf('\nconst currencyField',start);
+const currencyCatalog=JSON.parse(fs.readFileSync('static/currencies.json','utf8')).currencies;
+const context=vm.createContext({currencyCatalog,Intl,Number});vm.runInContext(source.slice(start,end),context);
+for(const [amount,expected]of [[10,'Ⱥ10'],[250,'Ⱥ250'],[1000,'Ⱥ1,000'],[1.25,'Ⱥ1.25']])assert.equal(vm.runInContext(`money(${amount},'AFR')`,context),expected);
+assert.match(vm.runInContext("money(1000,'NGN')",context),/₦1,000\.00/);
+assert.match(vm.runInContext("money(1000,'USD')",context),/USD.*1,000\.00/);
+assert.match(vm.runInContext("money(.003,'TND')",context),/0\.003/);
+console.log('Currency formatting checks passed: Afira examples, naira, explicit USD, three-decimal TND.');

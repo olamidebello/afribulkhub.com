@@ -132,3 +132,9 @@ The site and Android website client default to Nigerian Pidgin (`pcm`) for new v
 Browser choices survive reload through localStorage. Signed-in language preferences are scoped to each user, stored in the database and restored when signing in elsewhere. The deployment's existing schema-initialization step adds the preference table safely. Existing accounts and records are preserved. The web update applies in the Android client without replacing its signed APK. Attribution, licensing and catalog details are in `static/i18n/NOTICE.md`.
 
 Deploy with the same `ansible-pull` command above. This release retains automatic port selection, including protection of Atona on 8097.
+
+## African currencies, naira default and Afira
+
+The default for new prices is **Nigerian naira (NGN, ₦)**. The selector supports 46 currencies used in African countries/territories and **Afira (AFR, Ⱥ)** as a clearly labeled proposed custom unit. Afira is pronounced **Ah-FEE-rah**, has 100 cents per unit, and formats examples as **Ⱥ10 · Ⱥ250 · Ⱥ1,000**. Its name combines Africa and a new era of shared prosperity. No official currency status, backing, exchange rate, payment collection or redemption is represented.
+
+Currency preferences persist per browser/account. Forms, quotations, orders, disputes and cart subtotals preserve explicit denominations. Older prices remain USD; the upgrade never relabels dollar amounts as naira or Afira. See [currency details and migration behavior](CURRENCIES.md). The public currency guide is `/#currencies`. Deploy with the same pull-and-deploy command; no mobile APK rebuild is required.

@@ -1,0 +1,720 @@
+{
+  "default": "NGN",
+  "as_of": "2026-10-20",
+  "currencies": [
+    {
+      "code": "NGN",
+      "name": "Nigerian Naira",
+      "symbol": "₦",
+      "minor_units": 2,
+      "countries": [
+        "NG"
+      ],
+      "country_names": [
+        "Nigeria"
+      ],
+      "classification": "national_or_shared",
+      "iso_4217": true
+    },
+    {
+      "code": "DZD",
+      "name": "Algerian Dinar",
+      "symbol": "DZD",
+      "minor_units": 2,
+      "countries": [
+        "DZ"
+      ],
+      "country_names": [
+        "Algeria"
+      ],
+      "classification": "national_or_shared",
+      "iso_4217": true
+    },
+    {
+      "code": "AOA",
+      "name": "Angolan Kwanza",
+      "symbol": "AOA",
+      "minor_units": 2,
+      "countries": [
+        "AO"
+      ],
+      "country_names": [
+        "Angola"
+      ],
+      "classification": "national_or_shared",
+      "iso_4217": true
+    },
+    {
+      "code": "BWP",
+      "name": "Botswanan Pula",
+      "symbol": "BWP",
+      "minor_units": 2,
+      "countries": [
+        "BW"
+      ],
+      "country_names": [
+        "Botswana"
+      ],
+      "classification": "national_or_shared",
+      "iso_4217": true
+    },
+    {
+      "code": "GBP",
+      "name": "British Pound",
+      "symbol": "£",
+      "minor_units": 2,
+      "countries": [
+        "TA"
+      ],
+      "country_names": [
+        "Tristan da Cunha"
+      ],
+      "classification": "national_or_shared",
+      "iso_4217": true
+    },
+    {
+      "code": "BIF",
+      "name": "Burundian Franc",
+      "symbol": "BIF",
+      "minor_units": 0,
+      "countries": [
+        "BI"
+      ],
+      "country_names": [
+        "Burundi"
+      ],
+      "classification": "national_or_shared",
+      "iso_4217": true
+    },
+    {
+      "code": "CVE",
+      "name": "Cape Verdean Escudo",
+      "symbol": "CVE",
+      "minor_units": 2,
+      "countries": [
+        "CV"
+      ],
+      "country_names": [
+        "Cape Verde"
+      ],
+      "classification": "national_or_shared",
+      "iso_4217": true
+    },
+    {
+      "code": "XAF",
+      "name": "Central African CFA Franc",
+      "symbol": "FCFA",
+      "minor_units": 0,
+      "countries": [
+        "CM",
+        "CF",
+        "TD",
+        "CG",
+        "GQ",
+        "GA"
+      ],
+      "country_names": [
+        "Cameroon",
+        "Central African Republic",
+        "Chad",
+        "Congo - Brazzaville",
+        "Equatorial Guinea",
+        "Gabon"
+      ],
+      "classification": "national_or_shared",
+      "iso_4217": true
+    },
+    {
+      "code": "KMF",
+      "name": "Comorian Franc",
+      "symbol": "KMF",
+      "minor_units": 0,
+      "countries": [
+        "KM"
+      ],
+      "country_names": [
+        "Comoros"
+      ],
+      "classification": "national_or_shared",
+      "iso_4217": true
+    },
+    {
+      "code": "CDF",
+      "name": "Congolese Franc",
+      "symbol": "CDF",
+      "minor_units": 2,
+      "countries": [
+        "CD"
+      ],
+      "country_names": [
+        "Congo - Kinshasa"
+      ],
+      "classification": "national_or_shared",
+      "iso_4217": true
+    },
+    {
+      "code": "DJF",
+      "name": "Djiboutian Franc",
+      "symbol": "DJF",
+      "minor_units": 0,
+      "countries": [
+        "DJ"
+      ],
+      "country_names": [
+        "Djibouti"
+      ],
+      "classification": "national_or_shared",
+      "iso_4217": true
+    },
+    {
+      "code": "EGP",
+      "name": "Egyptian Pound",
+      "symbol": "EGP",
+      "minor_units": 2,
+      "countries": [
+        "EG"
+      ],
+      "country_names": [
+        "Egypt"
+      ],
+      "classification": "national_or_shared",
+      "iso_4217": true
+    },
+    {
+      "code": "ERN",
+      "name": "Eritrean Nakfa",
+      "symbol": "ERN",
+      "minor_units": 2,
+      "countries": [
+        "ER"
+      ],
+      "country_names": [
+        "Eritrea"
+      ],
+      "classification": "national_or_shared",
+      "iso_4217": true
+    },
+    {
+      "code": "ETB",
+      "name": "Ethiopian Birr",
+      "symbol": "ETB",
+      "minor_units": 2,
+      "countries": [
+        "ET"
+      ],
+      "country_names": [
+        "Ethiopia"
+      ],
+      "classification": "national_or_shared",
+      "iso_4217": true
+    },
+    {
+      "code": "EUR",
+      "name": "Euro",
+      "symbol": "€",
+      "minor_units": 2,
+      "countries": [
+        "RE",
+        "YT",
+        "IC",
+        "EA",
+        "TF"
+      ],
+      "country_names": [
+        "Réunion",
+        "Mayotte",
+        "Canary Islands",
+        "Ceuta & Melilla",
+        "French Southern Territories"
+      ],
+      "classification": "national_or_shared",
+      "iso_4217": true
+    },
+    {
+      "code": "GMD",
+      "name": "Gambian Dalasi",
+      "symbol": "GMD",
+      "minor_units": 2,
+      "countries": [
+        "GM"
+      ],
+      "country_names": [
+        "Gambia"
+      ],
+      "classification": "national_or_shared",
+      "iso_4217": true
+    },
+    {
+      "code": "GHS",
+      "name": "Ghanaian Cedi",
+      "symbol": "GHS",
+      "minor_units": 2,
+      "countries": [
+        "GH"
+      ],
+      "country_names": [
+        "Ghana"
+      ],
+      "classification": "national_or_shared",
+      "iso_4217": true
+    },
+    {
+      "code": "GNF",
+      "name": "Guinean Franc",
+      "symbol": "GNF",
+      "minor_units": 0,
+      "countries": [
+        "GN"
+      ],
+      "country_names": [
+        "Guinea"
+      ],
+      "classification": "national_or_shared",
+      "iso_4217": true
+    },
+    {
+      "code": "KES",
+      "name": "Kenyan Shilling",
+      "symbol": "KES",
+      "minor_units": 2,
+      "countries": [
+        "KE"
+      ],
+      "country_names": [
+        "Kenya"
+      ],
+      "classification": "national_or_shared",
+      "iso_4217": true
+    },
+    {
+      "code": "LSL",
+      "name": "Lesotho Loti",
+      "symbol": "LSL",
+      "minor_units": 2,
+      "countries": [
+        "LS"
+      ],
+      "country_names": [
+        "Lesotho"
+      ],
+      "classification": "national_or_shared",
+      "iso_4217": true
+    },
+    {
+      "code": "LRD",
+      "name": "Liberian Dollar",
+      "symbol": "LRD",
+      "minor_units": 2,
+      "countries": [
+        "LR"
+      ],
+      "country_names": [
+        "Liberia"
+      ],
+      "classification": "national_or_shared",
+      "iso_4217": true
+    },
+    {
+      "code": "LYD",
+      "name": "Libyan Dinar",
+      "symbol": "LYD",
+      "minor_units": 3,
+      "countries": [
+        "LY"
+      ],
+      "country_names": [
+        "Libya"
+      ],
+      "classification": "national_or_shared",
+      "iso_4217": true
+    },
+    {
+      "code": "MGA",
+      "name": "Malagasy Ariary",
+      "symbol": "MGA",
+      "minor_units": 2,
+      "countries": [
+        "MG"
+      ],
+      "country_names": [
+        "Madagascar"
+      ],
+      "classification": "national_or_shared",
+      "iso_4217": true
+    },
+    {
+      "code": "MWK",
+      "name": "Malawian Kwacha",
+      "symbol": "MWK",
+      "minor_units": 2,
+      "countries": [
+        "MW"
+      ],
+      "country_names": [
+        "Malawi"
+      ],
+      "classification": "national_or_shared",
+      "iso_4217": true
+    },
+    {
+      "code": "MRU",
+      "name": "Mauritanian Ouguiya",
+      "symbol": "MRU",
+      "minor_units": 2,
+      "countries": [
+        "MR"
+      ],
+      "country_names": [
+        "Mauritania"
+      ],
+      "classification": "national_or_shared",
+      "iso_4217": true
+    },
+    {
+      "code": "MUR",
+      "name": "Mauritian Rupee",
+      "symbol": "MUR",
+      "minor_units": 2,
+      "countries": [
+        "MU"
+      ],
+      "country_names": [
+        "Mauritius"
+      ],
+      "classification": "national_or_shared",
+      "iso_4217": true
+    },
+    {
+      "code": "MAD",
+      "name": "Moroccan Dirham",
+      "symbol": "MAD",
+      "minor_units": 2,
+      "countries": [
+        "MA",
+        "EH"
+      ],
+      "country_names": [
+        "Morocco",
+        "Western Sahara"
+      ],
+      "classification": "national_or_shared",
+      "iso_4217": true
+    },
+    {
+      "code": "MZN",
+      "name": "Mozambican Metical",
+      "symbol": "MZN",
+      "minor_units": 2,
+      "countries": [
+        "MZ"
+      ],
+      "country_names": [
+        "Mozambique"
+      ],
+      "classification": "national_or_shared",
+      "iso_4217": true
+    },
+    {
+      "code": "NAD",
+      "name": "Namibian Dollar",
+      "symbol": "NAD",
+      "minor_units": 2,
+      "countries": [
+        "NA"
+      ],
+      "country_names": [
+        "Namibia"
+      ],
+      "classification": "national_or_shared",
+      "iso_4217": true
+    },
+    {
+      "code": "RWF",
+      "name": "Rwandan Franc",
+      "symbol": "RWF",
+      "minor_units": 0,
+      "countries": [
+        "RW"
+      ],
+      "country_names": [
+        "Rwanda"
+      ],
+      "classification": "national_or_shared",
+      "iso_4217": true
+    },
+    {
+      "code": "SCR",
+      "name": "Seychellois Rupee",
+      "symbol": "SCR",
+      "minor_units": 2,
+      "countries": [
+        "SC"
+      ],
+      "country_names": [
+        "Seychelles"
+      ],
+      "classification": "national_or_shared",
+      "iso_4217": true
+    },
+    {
+      "code": "SLE",
+      "name": "Sierra Leonean Leone",
+      "symbol": "SLE",
+      "minor_units": 2,
+      "countries": [
+        "SL"
+      ],
+      "country_names": [
+        "Sierra Leone"
+      ],
+      "classification": "national_or_shared",
+      "iso_4217": true
+    },
+    {
+      "code": "SOS",
+      "name": "Somali Shilling",
+      "symbol": "SOS",
+      "minor_units": 2,
+      "countries": [
+        "SO"
+      ],
+      "country_names": [
+        "Somalia"
+      ],
+      "classification": "national_or_shared",
+      "iso_4217": true
+    },
+    {
+      "code": "ZAR",
+      "name": "South African Rand",
+      "symbol": "ZAR",
+      "minor_units": 2,
+      "countries": [
+        "LS",
+        "NA",
+        "ZA"
+      ],
+      "country_names": [
+        "Lesotho",
+        "Namibia",
+        "South Africa"
+      ],
+      "classification": "national_or_shared",
+      "iso_4217": true
+    },
+    {
+      "code": "SSP",
+      "name": "South Sudanese Pound",
+      "symbol": "SSP",
+      "minor_units": 2,
+      "countries": [
+        "SS"
+      ],
+      "country_names": [
+        "South Sudan"
+      ],
+      "classification": "national_or_shared",
+      "iso_4217": true
+    },
+    {
+      "code": "SHP",
+      "name": "St. Helena Pound",
+      "symbol": "SHP",
+      "minor_units": 2,
+      "countries": [
+        "SH",
+        "AC"
+      ],
+      "country_names": [
+        "St. Helena",
+        "Ascension Island"
+      ],
+      "classification": "national_or_shared",
+      "iso_4217": true
+    },
+    {
+      "code": "SDG",
+      "name": "Sudanese Pound",
+      "symbol": "SDG",
+      "minor_units": 2,
+      "countries": [
+        "SD"
+      ],
+      "country_names": [
+        "Sudan"
+      ],
+      "classification": "national_or_shared",
+      "iso_4217": true
+    },
+    {
+      "code": "SZL",
+      "name": "Swazi Lilangeni",
+      "symbol": "SZL",
+      "minor_units": 2,
+      "countries": [
+        "SZ"
+      ],
+      "country_names": [
+        "Eswatini"
+      ],
+      "classification": "national_or_shared",
+      "iso_4217": true
+    },
+    {
+      "code": "STN",
+      "name": "São Tomé & Príncipe Dobra",
+      "symbol": "STN",
+      "minor_units": 2,
+      "countries": [
+        "ST"
+      ],
+      "country_names": [
+        "São Tomé & Príncipe"
+      ],
+      "classification": "national_or_shared",
+      "iso_4217": true
+    },
+    {
+      "code": "TZS",
+      "name": "Tanzanian Shilling",
+      "symbol": "TZS",
+      "minor_units": 2,
+      "countries": [
+        "TZ"
+      ],
+      "country_names": [
+        "Tanzania"
+      ],
+      "classification": "national_or_shared",
+      "iso_4217": true
+    },
+    {
+      "code": "TND",
+      "name": "Tunisian Dinar",
+      "symbol": "TND",
+      "minor_units": 3,
+      "countries": [
+        "TN"
+      ],
+      "country_names": [
+        "Tunisia"
+      ],
+      "classification": "national_or_shared",
+      "iso_4217": true
+    },
+    {
+      "code": "USD",
+      "name": "US Dollar",
+      "symbol": "US$",
+      "minor_units": 2,
+      "countries": [
+        "ZW",
+        "IO",
+        "DG"
+      ],
+      "country_names": [
+        "Zimbabwe",
+        "British Indian Ocean Territory",
+        "Diego Garcia"
+      ],
+      "classification": "national_or_shared",
+      "iso_4217": true
+    },
+    {
+      "code": "UGX",
+      "name": "Ugandan Shilling",
+      "symbol": "UGX",
+      "minor_units": 0,
+      "countries": [
+        "UG"
+      ],
+      "country_names": [
+        "Uganda"
+      ],
+      "classification": "national_or_shared",
+      "iso_4217": true
+    },
+    {
+      "code": "XOF",
+      "name": "West African CFA Franc",
+      "symbol": "F CFA",
+      "minor_units": 0,
+      "countries": [
+        "BJ",
+        "BF",
+        "CI",
+        "GW",
+        "ML",
+        "NE",
+        "SN",
+        "TG"
+      ],
+      "country_names": [
+        "Benin",
+        "Burkina Faso",
+        "Côte d’Ivoire",
+        "Guinea-Bissau",
+        "Mali",
+        "Niger",
+        "Senegal",
+        "Togo"
+      ],
+      "classification": "national_or_shared",
+      "iso_4217": true
+    },
+    {
+      "code": "ZMW",
+      "name": "Zambian Kwacha",
+      "symbol": "ZMW",
+      "minor_units": 2,
+      "countries": [
+        "ZM"
+      ],
+      "country_names": [
+        "Zambia"
+      ],
+      "classification": "national_or_shared",
+      "iso_4217": true
+    },
+    {
+      "code": "ZWG",
+      "name": "Zimbabwean Gold",
+      "symbol": "ZWG",
+      "minor_units": 2,
+      "countries": [
+        "ZW"
+      ],
+      "country_names": [
+        "Zimbabwe"
+      ],
+      "classification": "national_or_shared",
+      "iso_4217": true
+    },
+    {
+      "code": "AFR",
+      "name": "Afira",
+      "symbol": "Ⱥ",
+      "pronunciation": "Ah-FEE-rah",
+      "minor_units": 2,
+      "subdivision": "cent",
+      "subdivision_ratio": 100,
+      "countries": [],
+      "country_names": [],
+      "classification": "proposed_custom",
+      "iso_4217": false,
+      "description": "The name combines Africa with a new era, representing shared prosperity across the continent. The strong A-shaped symbol connects it to Africa.",
+      "examples": [
+        "Ⱥ10",
+        "Ⱥ250",
+        "Ⱥ1,000"
+      ],
+      "notice": "Proposed custom pricing unit. Not represented as official legal tender or an ISO-assigned code. No exchange rate, reserve backing, redemption or payment acceptance is provided."
+    }
+  ],
+  "note": "46 current ISO-coded currencies used in African countries/territories, plus Afira (AFR), a proposed custom pricing unit. No exchange-rate conversion or payment integration is implied.",
+  "sources": [
+    "https://cldr.unicode.org/",
+    "https://www.iso.org/iso-4217-currency-codes.html",
+    "https://www.rbz.co.zw/index.php/publications-notices/notices/press-release/1419-press-statement-introduction-of-zimbabwe-gold-zig-currency-code-zwg"
+  ]
+}

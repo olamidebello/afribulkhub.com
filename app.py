@@ -1,5 +1,6 @@
 """Africa Bulk Hub. WSGI application; durable SQLite, explicit access checks."""
 import argparse
+from decimal import Decimal, ROUND_HALF_UP
 from functools import lru_cache
 import base64
 import hashlib
@@ -25,6 +26,8 @@ CREATE TABLE IF NOT EXISTS tenants(id INTEGER PRIMARY KEY,name TEXT NOT NULL,cou
 CREATE TABLE IF NOT EXISTS users(id INTEGER PRIMARY KEY,tenant_id INTEGER NOT NULL REFERENCES tenants(id),name TEXT NOT NULL,email TEXT NOT NULL UNIQUE,password TEXT NOT NULL,role TEXT NOT NULL CHECK(role IN ('buyer','supplier','provider','tenant_admin','super_admin')),status TEXT NOT NULL DEFAULT 'active',created INTEGER NOT NULL);
 CREATE TABLE IF NOT EXISTS acceptances(id INTEGER PRIMARY KEY,user_id INTEGER NOT NULL REFERENCES users(id),terms_version TEXT NOT NULL,privacy_version TEXT NOT NULL,created INTEGER NOT NULL);
 CREATE TABLE IF NOT EXISTS user_languages(user_id INTEGER PRIMARY KEY REFERENCES users(id),language TEXT NOT NULL DEFAULT 'pcm');
+CREATE TABLE IF NOT EXISTS schema_migrations(name TEXT PRIMARY KEY,created INTEGER NOT NULL);
+CREATE TABLE IF NOT EXISTS user_currencies(user_id INTEGER PRIMARY KEY REFERENCES users(id),currency TEXT NOT NULL);
 CREATE TABLE IF NOT EXISTS sessions(token TEXT PRIMARY KEY,user_id INTEGER NOT NULL REFERENCES users(id),csrf TEXT NOT NULL,expires INTEGER NOT NULL);
 CREATE TABLE IF NOT EXISTS records(id INTEGER PRIMARY KEY,kind TEXT NOT NULL,tenant_id INTEGER NOT NULL REFERENCES tenants(id),owner_id INTEGER NOT NULL REFERENCES users(id),peer_tenant INTEGER REFERENCES tenants(id),status TEXT NOT NULL,data TEXT NOT NULL,created INTEGER NOT NULL,updated INTEGER NOT NULL);
 CREATE INDEX IF NOT EXISTS record_kind ON records(kind,tenant_id);
@@ -38,7 +41,7 @@ CREATE TABLE IF NOT EXISTS resets(token TEXT PRIMARY KEY,user_id INTEGER NOT NUL
 '''
 KINDS = {'product','rfq','quote','order','job','application','message','ticket','dispute','review','verification','campaign','notification','address'}
 PUBLIC = {'product','rfq','job'}
-DEFAULTS = {'platform_name':'Africa Bulk Hub','commission_percent':5,'seller_monthly_usd':29,'support_email':'','countries':['Nigeria','Ghana','Kenya','South Africa','Egypt','United States'],'currencies':['USD'],'payments_enabled':False,'registration_enabled':True}
+DEFAULTS = {'platform_name':'Africa Bulk Hub','commission_percent':5,'seller_monthly_usd':29,'support_email':'','countries':['Nigeria','Ghana','Kenya','South Africa','Egypt','United States'],'currencies':[r['code'] for r in json.loads((ROOT/'static/currencies.json').read_text())['currencies']],'default_currency':'NGN','payments_enabled':False,'registration_enabled':True}
 
 def connect():
     p = Path(DB); p.parent.mkdir(parents=True, exist_ok=True)
@@ -49,13 +52,45 @@ def connect():
 def init_db():
     with connect() as c:
         c.executescript(SCHEMA)
+        c.execute("BEGIN IMMEDIATE")
         for k,v in DEFAULTS.items():
             c.execute('INSERT OR IGNORE INTO settings VALUES (?,?)',(k,json.dumps(v)))
+        existing_codes=c.execute('SELECT value FROM settings WHERE key=?',('currencies',)).fetchone()
+        if json.loads(existing_codes[0])!=DEFAULTS['currencies']:
+            c.execute('UPDATE settings SET value=? WHERE key=?',(json.dumps(DEFAULTS['currencies']),'currencies'))
+        if not c.execute("SELECT 1 FROM schema_migrations WHERE name='currencies-v1'").fetchone():
+            # Earlier releases priced all monetary records in USD. Preserve the unit,
+            # including products and quotations which did not store a currency field.
+            for row in c.execute("SELECT id,kind,data FROM records WHERE kind IN ('product','rfq','job','quote','application','order','dispute','campaign')").fetchall():
+                data=json.loads(row['data'])
+                if not data.get('currency'):
+                    data['currency']='USD';c.execute('UPDATE records SET data=? WHERE id=?',(json.dumps(data),row['id']))
+            c.execute('UPDATE settings SET value=? WHERE key=?',(json.dumps(DEFAULTS['currencies']),'currencies'))
+            c.execute('INSERT INTO schema_migrations VALUES (?,?)',('currencies-v1',now()))
+
 
 @lru_cache(maxsize=1)
 def language_codes():
     data=json.loads((ROOT/'static/i18n/languages.json').read_text())
     return frozenset(item['code'] for item in data['languages'])
+
+@lru_cache(maxsize=1)
+def currency_info():
+    return {r['code']:r for r in json.loads((ROOT/'static/currencies.json').read_text())['currencies']}
+
+def currency_code(value=None):
+    code=str(value or 'NGN').strip().upper()
+    require(code in currency_info(),'Unsupported currency',400)
+    return code
+
+def monetary(d,key,code,minimum=0):
+    value=number(d,key,minimum);unit=Decimal(1).scaleb(-currency_info()[code]['minor_units']);decimal=Decimal(str(value))
+    require(decimal==decimal.quantize(unit),'Too many decimal places for '+code,400)
+    return value
+
+def total_price(price,quantity,code):
+    unit=Decimal(1).scaleb(-currency_info()[code]['minor_units'])
+    return float((Decimal(str(price))*Decimal(str(quantity))).quantize(unit,rounding=ROUND_HALF_UP))
 
 def password_hash(p):
     salt = secrets.token_hex(16)
@@ -81,6 +116,7 @@ def person(c,uid):
     if not r:return None
     result=dict(r);preference=c.execute('SELECT language FROM user_languages WHERE user_id=?',(uid,)).fetchone()
     result['language']=preference[0] if preference else None
+    currency=c.execute('SELECT currency FROM user_currencies WHERE user_id=?',(uid,)).fetchone();result['currency']=currency[0] if currency else None
     return result
 
 def visible(u,r):
@@ -117,9 +153,10 @@ def sanitize(kind,d):
     }.get(kind,[])
     result={k:clean(d.get(k),4000 if k=='description' else 500) for k in allowed}
     require(result.get('title'),'Title is required',400)
+    if kind in {'product','rfq','job','campaign'}:result['currency']=currency_code(d.get('currency'))
     if kind=='product':
-        result.update(price=number(d,'price',0.01),moq=number(d,'moq',1),stock=number(d,'stock'),unit=clean(d.get('unit') or 'unit'))
-    if kind in {'rfq','job','campaign'}: result['budget']=number(d,'budget')
+        result.update(price=monetary(d,'price',result['currency'],0.001),moq=number(d,'moq',1),stock=number(d,'stock'),unit=clean(d.get('unit') or 'unit'))
+    if kind in {'rfq','job','campaign'}: result['budget']=monetary(d,'budget',result['currency'])
     if kind=='rfq': result['quantity']=number(d,'quantity',1)
     return result
 
@@ -160,6 +197,7 @@ def api(c,env,method,path,d,q):
     if path in {'/api/health','/api/session'}: require(method=='GET','Method not allowed',405)
     if path=='/api/health': return {'status':'ok','service':'afribulkhub'},extra
     if path=='/api/session': return {'user':u,'csrf':s['csrf'] if s else None},extra
+    if path=='/api/currencies' and method=='GET':return json.loads((ROOT/'static/currencies.json').read_text()),extra
     if path=='/api/settings' and method=='GET': return settings(c),extra
     if path in {'/api/register','/api/login','/api/recover','/api/reset'}:
         require(method=='POST','Method not allowed',405)
@@ -271,7 +309,7 @@ def api(c,env,method,path,d,q):
             p=record(c,item['product_id']);require(c.execute('SELECT status FROM tenants WHERE id=?',(p['tenant_id'],)).fetchone()[0]=='active','Supplier is unavailable',409);require(p['status']=='published','A cart item is no longer available',409)
             pd=json.loads(p['data']);qty=item['quantity'];require(pd['moq']<=qty<=pd['stock'],'Stock or MOQ has changed. Update your cart.',409)
             pd['stock']-=qty;c.execute('UPDATE records SET data=?,updated=? WHERE id=?',(json.dumps(pd),now(),p['id']))
-            orders.append(add(c,u,'order',{'product_id':p['id'],'title':pd['title'],'quantity':qty,'unit_price':pd['price'],'total':round(qty*pd['price'],2),'currency':'USD','delivery_address':address,'payment_status':'unpaid','stock_reserved':True},'pending',p['tenant_id']))
+            orders.append(add(c,u,'order',{'product_id':p['id'],'title':pd['title'],'quantity':qty,'unit_price':pd['price'],'total':total_price(pd['price'],qty,pd['currency']),'currency':pd['currency'],'delivery_address':address,'payment_status':'unpaid','stock_reserved':True},'pending',p['tenant_id']))
         c.execute('DELETE FROM cart WHERE user_id=?',(u['id'],));return {'items':orders},extra
     if path=='/api/language':
         if method=='GET':return {'language':u.get('language') or 'pcm','default':'pcm'},extra
@@ -279,6 +317,11 @@ def api(c,env,method,path,d,q):
         code=clean(d.get('language'),50);require(code in language_codes(),'Unknown language code',400)
         c.execute('INSERT INTO user_languages VALUES (?,?) ON CONFLICT(user_id) DO UPDATE SET language=excluded.language',(u['id'],code))
         audit(c,u,'language:update');return {'language':code,'default':'pcm'},extra
+    if path=='/api/currency':
+        if method=='GET':return {'currency':u.get('currency') or 'NGN','default':'NGN'},extra
+        require(method=='PATCH','Method not allowed',405);code=currency_code(d.get('currency'))
+        c.execute('INSERT INTO user_currencies VALUES (?,?) ON CONFLICT(user_id) DO UPDATE SET currency=excluded.currency',(u['id'],code))
+        audit(c,u,'currency:update');return {'currency':code,'default':'NGN'},extra
     if path=='/api/profile' and method=='PATCH':
         require(clean(d.get('name')),'Name required',400)
         c.execute('UPDATE users SET name=? WHERE id=?',(clean(d['name']),u['id']))
@@ -305,6 +348,8 @@ def api(c,env,method,path,d,q):
     if path=='/api/records' and method=='POST':
         kind=d.get('kind');require(kind in KINDS,'Unknown module',400)
         data=d.get('data',{});require(isinstance(data,dict),'Expected record fields object',400);peer=None
+        data=dict(data)
+        if kind in {'product','rfq','job','campaign','quote','application'}:data.setdefault('currency',u.get('currency') or 'NGN')
         if kind in {'product','campaign'}:require(u['role'] in {'supplier','tenant_admin','super_admin'},'Supplier account required')
         if kind in {'product','rfq','job','ticket','verification','campaign','address'}:
             return add(c,u,kind,sanitize(kind,data),'pending' if kind in {'product','verification','campaign'} else ('published' if kind in {'rfq','job'} else 'open')),extra
@@ -312,18 +357,18 @@ def api(c,env,method,path,d,q):
             require(u['role'] in {'supplier','tenant_admin','super_admin'},'Supplier account required')
             target=record(c,int(data.get('rfq_id',0)));require(target['kind']=='rfq' and target['status']=='published','RFQ is closed',400)
             require(target['tenant_id']!=u['tenant_id'],'Cannot quote your own request',400)
-            return add(c,u,kind,{'rfq_id':target['id'],'title':json.loads(target['data'])['title'],'price':number(data,'price',0.01),'quantity':number(data,'quantity',1),'lead_time':clean(data.get('lead_time')),'description':clean(data.get('description'),4000)},peer=target['tenant_id']),extra
+            return add(c,u,kind,{'rfq_id':target['id'],'title':json.loads(target['data'])['title'],'price':monetary(data,'price',currency_code(data.get('currency')),0.001),'currency':currency_code(data.get('currency')),'quantity':number(data,'quantity',1),'lead_time':clean(data.get('lead_time')),'description':clean(data.get('description'),4000)},peer=target['tenant_id']),extra
         if kind=='order':
             target=record(c,int(data.get('product_id',0)));require(c.execute('SELECT status FROM tenants WHERE id=?',(target['tenant_id'],)).fetchone()[0]=='active','Supplier is unavailable',409);require(target['kind']=='product' and target['status']=='published','Product unavailable',400)
             require(target['tenant_id']!=u['tenant_id'],'Cannot order your own product',400)
             p=json.loads(target['data']);qty=number(data,'quantity',p['moq']);require(qty.is_integer(),'Quantity must be a whole number',400)
             require(qty<=float(p['stock']),'Requested quantity exceeds available stock',400)
             p['stock']=float(p['stock'])-qty;c.execute('UPDATE records SET data=?,updated=? WHERE id=?',(json.dumps(p),now(),target['id']))
-            return add(c,u,kind,{'product_id':target['id'],'title':p['title'],'quantity':qty,'unit_price':p['price'],'total':round(qty*p['price'],2),'currency':'USD','delivery_address':clean(data.get('delivery_address'),1500),'payment_status':'unpaid','stock_reserved':True},'pending',target['tenant_id']),extra
+            return add(c,u,kind,{'product_id':target['id'],'title':p['title'],'quantity':qty,'unit_price':p['price'],'total':total_price(p['price'],qty,p['currency']),'currency':p['currency'],'delivery_address':clean(data.get('delivery_address'),1500),'payment_status':'unpaid','stock_reserved':True},'pending',target['tenant_id']),extra
         if kind=='application':
             target=record(c,int(data.get('job_id',0)));require(target['kind']=='job' and target['status']=='published','Job unavailable',400)
             require(target['tenant_id']!=u['tenant_id'],'Cannot apply to your own job',400)
-            return add(c,u,kind,{'job_id':target['id'],'title':json.loads(target['data'])['title'],'price':number(data,'price',0.01),'description':clean(data.get('description'),4000)},peer=target['tenant_id']),extra
+            return add(c,u,kind,{'job_id':target['id'],'title':json.loads(target['data'])['title'],'price':monetary(data,'price',currency_code(data.get('currency')),0.001),'currency':currency_code(data.get('currency')),'description':clean(data.get('description'),4000)},peer=target['tenant_id']),extra
         if kind=='message':
             target=record(c,int(data.get('context_id',0)));require(visible(u,target),'Not found',404)
             require(target['tenant_id']!=u['tenant_id'] or target['peer_tenant'],'Select an external conversation',400)
@@ -332,7 +377,7 @@ def api(c,env,method,path,d,q):
             return add(c,u,kind,{'context_id':target['id'],'title':json.loads(target['data']).get('title','Conversation'),'description':clean(data.get('description'),4000)},'sent',peer),extra
         if kind=='dispute':
             target=record(c,int(data.get('order_id',0)));require(target['kind']=='order' and u['tenant_id'] in (target['tenant_id'],target['peer_tenant']),'Order unavailable',404)
-            v=sanitize(kind,data);v['order_id']=target['id'];v['amount']=number(data,'amount');require(v['amount']<=json.loads(target['data'])['total'],'Amount exceeds order total',400)
+            v=sanitize(kind,data);v['order_id']=target['id'];v['currency']=json.loads(target['data'])['currency'];v['amount']=monetary(data,'amount',v['currency']);require(v['amount']<=json.loads(target['data'])['total'],'Amount exceeds order total',400)
             peer=target['peer_tenant'] if u['tenant_id']==target['tenant_id'] else target['tenant_id']
             return add(c,u,kind,v,peer=peer),extra
         if kind=='review':
@@ -350,7 +395,9 @@ def api(c,env,method,path,d,q):
         elif 'data' in d:
             require((own or admin) and r['kind'] in {'product','rfq','job','address','campaign'},'Record cannot be edited')
             require(isinstance(d['data'],dict),'Expected record fields object',400)
-            data=sanitize(r['kind'],d['data'])
+            previous=json.loads(r['data']);incoming=dict(d['data']);incoming.setdefault('currency',previous.get('currency','USD'))
+            require(incoming.get('currency')==previous.get('currency','USD'),'Cannot change a published record currency; create a new listing or request',409)
+            data=sanitize(r['kind'],incoming)
             c.execute('UPDATE records SET data=?,status=?,updated=? WHERE id=?',(json.dumps(data),'pending' if r['kind']=='product' else r['status'],now(),r['id']));audit(c,u,'edit:'+r['kind'],r['id'])
         else:
             status=clean(d.get('status'));kind=r['kind'];old=r['status']
@@ -373,7 +420,7 @@ def api(c,env,method,path,d,q):
                 require(r['peer_tenant']==u['tenant_id'] and old=='open' and status in {'accepted','rejected'},'Only the buyer may decide an open quote')
                 if status=='accepted':
                     rfq=record(c,json.loads(r['data'])['rfq_id']);require(rfq['status']=='published','RFQ already awarded',409)
-                    qd=json.loads(r['data']);add(c,u,'order',{'title':qd['title'],'quote_id':r['id'],'quantity':qd['quantity'],'unit_price':qd['price'],'total':round(qd['price']*qd['quantity'],2),'currency':'USD','payment_status':'unpaid'},'accepted',r['tenant_id'])
+                    qd=json.loads(r['data']);add(c,u,'order',{'title':qd['title'],'quote_id':r['id'],'quantity':qd['quantity'],'unit_price':qd['price'],'total':total_price(qd['price'],qd['quantity'],qd['currency']),'currency':qd['currency'],'payment_status':'unpaid'},'accepted',r['tenant_id'])
                     c.execute('UPDATE records SET status=? WHERE id=?',('closed',rfq['id']))
             elif kind=='application':
                 require(r['peer_tenant']==u['tenant_id'] and old=='open' and status in {'accepted','rejected'},'Only the job owner may decide an open application')
@@ -407,6 +454,8 @@ def api(c,env,method,path,d,q):
         if path=='/api/admin/settings' and method=='PATCH':
             for k,v in d.items():
                 require(k in DEFAULTS,'Unknown setting',400)
+                if k=='default_currency':require(v=='NGN','Marketplace default currency is NGN',400)
+                if k=='currencies':require(v==DEFAULTS['currencies'],'Currency catalog is managed by the application',400)
                 if k=='payments_enabled':require(v is False,'Live payment provider integration is not installed',409)
                 require(type(v) is type(DEFAULTS[k]),'Invalid setting type: '+k,400)
                 if k in {'commission_percent','seller_monthly_usd'}: require(0<=v<=10000,'Invalid price',400)
