@@ -20,6 +20,25 @@
           - hub_port | int < 65536
           - not hub_https or hub_email | length > 3
         fail_msg: Set hub_email for certificate notices, or explicitly disable hub_https for local preparation only.
+    - name: Resolve domain addresses before changing hosting or requesting HTTPS
+      ansible.builtin.script:
+        cmd: '../tools/check_host_dns.py --domain {{ hub_domain | quote }} --local {{ ((ansible_all_ipv4_addresses | default([])) + (ansible_all_ipv6_addresses | default([]))) | to_json | quote }}'
+        executable: python3
+      register: hub_dns_check
+      changed_when: false
+      when: hub_https
+    - name: Require domain DNS to reach this server for direct HTTPS installation
+      ansible.builtin.assert:
+        that:
+          - (hub_dns_check.stdout | from_json).ready
+        fail_msg: >-
+          DNS for {{ hub_domain }} resolves to {{ (hub_dns_check.stdout | from_json).resolved }},
+          but this server has {{ (hub_dns_check.stdout | from_json).server_addresses }}.
+          Update the domain A/AAAA records to this hosting server, or run this installer on
+          the server where the domain currently points. Retry after DNS propagation.
+          No certificate request was attempted. This preflight uses this server's DNS resolver;
+          public DNS must also agree before Let's Encrypt can validate HTTP-01.
+      when: hub_https
     - name: Install runtime packages
       ansible.builtin.apt:
         name: [python3, python3-venv, nginx, certbot, python3-certbot-nginx]
@@ -77,6 +96,9 @@
         mode: '0644'
       loop:
         - {src: '../app.py', dest: '{{ hub_install }}/app.py'}
+        - {src: '../alibaba_import.py', dest: '{{ hub_install }}/alibaba_import.py'}
+        - {src: '../api_credentials.py', dest: '{{ hub_install }}/api_credentials.py'}
+        - {src: '../tools/sync_alibaba.py', dest: '{{ hub_install }}/sync_alibaba.py'}
         - {src: '../requirements.txt', dest: '{{ hub_install }}/requirements.txt'}
     - name: Install website branding, legal pages and verified mobile release
       ansible.builtin.copy:
@@ -133,13 +155,60 @@
           ReadWritePaths={{ hub_data }}
           [Install]
           WantedBy=multi-user.target
+    - name: Install authorized Alibaba feed import service
+      ansible.builtin.copy:
+        dest: /etc/systemd/system/afribulkhub-alibaba.service
+        mode: '0644'
+        content: |
+          [Unit]
+          Description=Import authorized Alibaba offers with 30 percent markup
+          ConditionPathExists={{ hub_data }}/alibaba-offers.json
+          [Service]
+          Type=oneshot
+          User=afribulkhub
+          Group=afribulkhub
+          WorkingDirectory={{ hub_install }}
+          Environment=ABH_DATABASE={{ hub_data }}/hub.db
+          ExecStart={{ hub_install }}/venv/bin/python {{ hub_install }}/sync_alibaba.py --feed {{ hub_data }}/alibaba-offers.json --email {{ hub_admin_email }}
+          UMask=0077
+          NoNewPrivileges=true
+          ProtectSystem=strict
+          ProtectHome=true
+          PrivateTmp=true
+          ReadWritePaths={{ hub_data }}
+    - name: Install Alibaba feed import timer
+      ansible.builtin.copy:
+        dest: /etc/systemd/system/afribulkhub-alibaba.timer
+        mode: '0644'
+        content: |
+          [Unit]
+          Description=Check authorized Alibaba offer feed every 15 minutes
+          [Timer]
+          OnBootSec=2min
+          OnCalendar=*:0/15
+          Persistent=true
+          [Install]
+          WantedBy=timers.target
+    - name: Enable authorized feed import scheduling
+      ansible.builtin.systemd:
+        name: afribulkhub-alibaba.timer
+        state: started
+        enabled: true
+        daemon_reload: true
     - name: Load the updated dedicated service unit
       ansible.builtin.systemd:
         daemon_reload: true
+    - name: Inspect previous Hub failure state without requiring a loaded unit
+      ansible.builtin.command:
+        argv: [systemctl, is-failed, afribulkhub.service]
+      register: hub_previous_failure
+      changed_when: false
+      failed_when: false
     - name: Clear previous Hub startup failures after port recovery
       ansible.builtin.command:
         argv: [systemctl, reset-failed, afribulkhub.service]
       changed_when: false
+      when: hub_previous_failure.stdout | trim == 'failed'
     - name: Restart application with updated code
       ansible.builtin.systemd:
         name: afribulkhub

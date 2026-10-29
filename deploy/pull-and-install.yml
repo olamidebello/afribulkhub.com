@@ -1,0 +1,71 @@
+---
+- name: Pull and install Africa Bulk Hub with Alibaba API management
+  hosts: all
+  become: true
+  vars:
+    hub_source: /opt/afribulkhub-alibaba-source
+    # Use the feature branch until PR 1 is merged; override with -e hub_version=main later.
+    hub_version: alibaba-import-markup
+    hub_domain: afribulkhub.com
+    hub_email: dobcalldemo@gmail.com
+    hub_admin_email: '{{ hub_email }}'
+    hub_port: 0
+    hub_install: /opt/afribulkhub
+    hub_data: /var/lib/afribulkhub
+    hub_https: true
+  tasks:
+    - name: Install Git and Ansible on the target
+      ansible.builtin.apt:
+        name: [git, ansible, python3]
+        state: present
+        update_cache: true
+        cache_valid_time: 3600
+    - name: Pull selected release without discarding local edits
+      ansible.builtin.git:
+        repo: https://github.com/olamidebello/afribulkhub.com.git
+        dest: '{{ hub_source }}'
+        version: '{{ hub_version }}'
+        force: false
+      register: hub_checkout
+    - name: Install the selected checkout with backups and hosting checks
+      ansible.builtin.command:
+        argv:
+          - ansible-playbook
+          - -i
+          - localhost,
+          - -c
+          - local
+          - '{{ hub_source }}/deploy/deploy.yml'
+          - -e
+          - '{{ {"hub_email": hub_email, "hub_admin_email": hub_admin_email, "hub_domain": hub_domain, "hub_port": hub_port | int, "hub_install": hub_install, "hub_data": hub_data, "hub_https": hub_https | bool} | to_json }}'
+      changed_when: true
+    - name: Verify Alibaba modules and migrated schema using the runtime account
+      ansible.builtin.command:
+        argv:
+          - '{{ hub_install }}/venv/bin/python'
+          - -c
+          - |
+            import app, api_credentials, alibaba_import
+            with app.connect() as c:
+                tables={r[0] for r in c.execute("SELECT name FROM sqlite_master WHERE type='table'")}
+                assert {'alibaba_offers','integration_credentials'} <= tables, 'Alibaba schema missing'
+                row, _=api_credentials.read(c)
+                if row and row['secrets']:
+                    api_credentials.decrypt(row, app)
+            print('Alibaba API management installed; schema and saved credential access verified')
+        chdir: '{{ hub_install }}'
+      environment:
+        ABH_DATABASE: '{{ hub_data }}/hub.db'
+      become_user: afribulkhub
+      changed_when: false
+    - name: Verify scheduled feed import timer
+      ansible.builtin.command:
+        argv: [systemctl, is-active, afribulkhub-alibaba.timer]
+      changed_when: false
+    - name: Report installed release and management screen
+      ansible.builtin.debug:
+        msg:
+          - 'Installed revision: {{ hub_checkout.after }}'
+          - 'Super Admin → Alibaba API & keys: https://{{ hub_domain }}/#alibaba'
+          - 'Selling prices use supplier cost plus 30 percent.'
+          - 'The feed timer is installed. Live Alibaba fetching still requires approved credentials and its API adapter.'

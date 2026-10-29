@@ -1,0 +1,22 @@
+---
+- name: Require the selected production hosting server
+  hosts: all
+  become: true
+  any_errors_fatal: true
+  tasks:
+    - name: Prevent installation on the other panel server
+      ansible.builtin.assert:
+        that:
+          - "'181.214.149.146' in (ansible_all_ipv4_addresses | default([]))"
+        fail_msg: >-
+          This entrypoint must run on 181.214.149.146, the selected Africa Bulk Hub
+          hosting server. Connect to that server first, or use deploy/hosts-181.ini
+          as the SSH inventory. No application installation was started.
+        success_msg: Correct hosting server verified (181.214.149.146).
+
+- name: Install or update Africa Bulk Hub on the selected server
+  ansible.builtin.import_playbook: pull-and-install.yml
+  vars:
+    hub_domain: afribulkhub.com
+    hub_version: alibaba-import-markup
+    hub_https: true
