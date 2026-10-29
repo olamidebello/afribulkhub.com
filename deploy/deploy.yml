@@ -20,6 +20,25 @@
           - hub_port | int < 65536
           - not hub_https or hub_email | length > 3
         fail_msg: Set hub_email for certificate notices, or explicitly disable hub_https for local preparation only.
+    - name: Resolve domain addresses before changing hosting or requesting HTTPS
+      ansible.builtin.script:
+        cmd: '../tools/check_host_dns.py --domain {{ hub_domain | quote }} --local {{ ((ansible_all_ipv4_addresses | default([])) + (ansible_all_ipv6_addresses | default([]))) | to_json | quote }}'
+        executable: python3
+      register: hub_dns_check
+      changed_when: false
+      when: hub_https
+    - name: Require domain DNS to reach this server for direct HTTPS installation
+      ansible.builtin.assert:
+        that:
+          - (hub_dns_check.stdout | from_json).ready
+        fail_msg: >-
+          DNS for {{ hub_domain }} resolves to {{ (hub_dns_check.stdout | from_json).resolved }},
+          but this server has {{ (hub_dns_check.stdout | from_json).server_addresses }}.
+          Update the domain A/AAAA records to this hosting server, or run this installer on
+          the server where the domain currently points. Retry after DNS propagation.
+          No certificate request was attempted. This preflight uses this server's DNS resolver;
+          public DNS must also agree before Let's Encrypt can validate HTTP-01.
+      when: hub_https
     - name: Install runtime packages
       ansible.builtin.apt:
         name: [python3, python3-venv, nginx, certbot, python3-certbot-nginx]
