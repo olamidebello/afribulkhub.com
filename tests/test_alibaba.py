@@ -23,6 +23,55 @@ class AlibabaTests(unittest.TestCase):
         for value in ['NaN', 'Infinity', '-1', '0', '1.001']:
             with self.assertRaises(ValueError): sale_price(value, 2)
 
+    def test_credential_permissions_encryption_and_rotation(self):
+        url='/api/admin/alibaba/credentials'
+        secrets={'revision':0,'app_key':'example-app-key','app_secret':'private-secret-one',
+                 'access_token':'private-access-token','refresh_token':'private-refresh-token'}
+        self.assertEqual(self.buyer.req(url)[0],403)
+        self.assertEqual(Client().req(url)[0],401)
+        self.assertEqual(self.admin.req(url,'PATCH',secrets,csrf=False)[0],403)
+        status,result=self.admin.req(url,'PATCH',secrets)
+        self.assertEqual(status,200);self.assertTrue(all(result['credentials'].values()))
+        self.assertEqual(result['revision'],1)
+        self.assertNotIn('private-secret-one',json.dumps(result))
+        with app.connect() as c:
+            stored=c.execute('SELECT secrets FROM integration_credentials').fetchone()[0]
+            self.assertNotIn('private-secret-one',stored)
+            import api_credentials
+            self.assertEqual(api_credentials.decrypt(api_credentials.read(c)[0],app)['app_secret'],'private-secret-one')
+        _,result=self.admin.req(url,'PATCH',{'revision':1,'app_secret':'replacement-secret','access_token':''})
+        self.assertEqual(result['revision'],2)
+        self.assertEqual(self.admin.req(url,'PATCH',{'revision':1,'enabled':False})[0],409)
+        self.assertEqual(self.admin.req('/api/admin/alibaba/validate','POST',{})[1]['credentials_present'],True)
+        for path in ['/api/settings','/api/admin/audit',url]:
+            self.assertNotIn('replacement-secret',json.dumps(self.admin.req(path)[1]))
+        _,result=self.admin.req(url,'DELETE',{})
+        self.assertFalse(result['enabled']);self.assertFalse(any(result['credentials'].values()))
+        self.assertEqual(self.admin.req('/api/admin/alibaba/import','POST',self.feed())[0],409)
+
+    def test_integration_controls_and_local_validation(self):
+        url='/api/admin/alibaba/credentials'
+        self.assertEqual(self.admin.req(url,'PATCH',{'revision':0,'auto_publish':False})[0],200)
+        self.admin.req('/api/admin/alibaba/import','POST',self.feed())
+        rows=self.admin.req('/api/records?kind=product')[1]['items']
+        self.assertEqual(rows[0]['status'],'pending')
+        _,validation=self.admin.req('/api/admin/alibaba/validate','POST',{})
+        self.assertFalse(validation['credentials_present']);self.assertFalse(validation['live_api_connected'])
+        for bad in [{'enabled':'yes'}, {'environment':'bad'}, {'token_expires_at':-1}, {'endpoint':'http://localhost'}]:
+            self.assertEqual(self.admin.req(url,'PATCH',dict(bad,revision=1))[0],400)
+
+    def test_missing_vault_key_does_not_replace_credentials(self):
+        from pathlib import Path
+        url='/api/admin/alibaba/credentials'
+        self.admin.req(url,'PATCH',{'revision':0,'app_secret':'keep-this-secret'})
+        key=Path(app.DB).parent/'api-credentials.key'
+        self.assertEqual(key.stat().st_mode & 0o777,0o600)
+        original=key.read_bytes();key.unlink()
+        self.assertEqual(self.admin.req(url,'PATCH',{'revision':1,'app_secret':'new-secret'})[0],409)
+        self.assertFalse(key.exists())
+        key.write_bytes(original)
+        self.assertEqual(self.admin.req('/api/admin/alibaba/validate','POST',{})[0],200)
+
     def test_import_permissions_and_private_cost(self):
         endpoint = '/api/admin/alibaba/import'
         self.assertEqual(self.buyer.req(endpoint,'POST',self.feed())[0],403)

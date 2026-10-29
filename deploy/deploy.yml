@@ -78,6 +78,7 @@
       loop:
         - {src: '../app.py', dest: '{{ hub_install }}/app.py'}
         - {src: '../alibaba_import.py', dest: '{{ hub_install }}/alibaba_import.py'}
+        - {src: '../api_credentials.py', dest: '{{ hub_install }}/api_credentials.py'}
         - {src: '../tools/sync_alibaba.py', dest: '{{ hub_install }}/sync_alibaba.py'}
         - {src: '../requirements.txt', dest: '{{ hub_install }}/requirements.txt'}
     - name: Install website branding, legal pages and verified mobile release

@@ -1,6 +1,7 @@
 """Africa Bulk Hub. WSGI application; durable SQLite, explicit access checks."""
 import argparse
 import alibaba_import
+import api_credentials
 from decimal import Decimal, ROUND_HALF_UP
 from functools import lru_cache
 import base64
@@ -54,6 +55,7 @@ def init_db():
     with connect() as c:
         c.executescript(SCHEMA)
         alibaba_import.init(c)
+        api_credentials.init(c)
         c.execute("BEGIN IMMEDIATE")
         for k,v in DEFAULTS.items():
             c.execute('INSERT OR IGNORE INTO settings VALUES (?,?)',(k,json.dumps(v)))
@@ -451,6 +453,14 @@ def api(c,env,method,path,d,q):
         audit(c,u,'team:add',uid);return person(c,uid),extra
     if path.startswith('/api/admin'):
         require(u['role']=='super_admin','Super administrator required')
+        if path=='/api/admin/alibaba/credentials':
+            if method=='GET':return api_credentials.status(c,__import__(__name__)),extra
+            if method=='PATCH':return api_credentials.save(c,u,d,__import__(__name__)),extra
+            if method=='DELETE':return api_credentials.revoke(c,u,__import__(__name__)),extra
+            raise Error(405,'Method not allowed')
+        if path=='/api/admin/alibaba/validate':
+            require(method=='POST','Method not allowed',405)
+            return api_credentials.validate(c,u,__import__(__name__)),extra
         if path=='/api/admin/alibaba' and method=='GET':
             return {'markup_percent':30,'imported_products':c.execute('SELECT COUNT(*) FROM alibaba_offers').fetchone()[0],'last_sync':c.execute('SELECT MAX(synced) FROM alibaba_offers').fetchone()[0],'live_api_connected':False},extra
         if path=='/api/admin/alibaba/import':

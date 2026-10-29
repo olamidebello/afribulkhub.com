@@ -8,7 +8,7 @@ never from the previous selling price. Existing orders keep their agreed price.
 
 ## Current capabilities
 
-Super administrators can use **Platform operations → Alibaba imports** to import
+Super administrators can use **Platform operations → Alibaba API & keys** to import
 authorized normalized JSON. New listings publish automatically, as requested. Subsequent imports
 update the same listing's price and available stock, preserving its existing status.
 Archived or rejected listings are not automatically reactivated.
@@ -82,3 +82,31 @@ sudo -u afribulkhub env ABH_DATABASE=/var/lib/afribulkhub/hub.db \
 The timer can be inspected with `systemctl status afribulkhub-alibaba.timer` and
 `journalctl -u afribulkhub-alibaba.service`. Existing pull-and-deploy instructions
 apply after these changes are merged; source preparation does not deploy the server.
+
+
+## Super-admin API and key management
+
+The Alibaba API & keys screen lets active super administrators provision local
+App Key/Secret and access/refresh-token settings, replace credentials, remove
+saved credentials, record token expiry, select production/sandbox metadata, pause
+all imports, pause scheduled imports only, and control automatic publication.
+The 30% markup remains fixed. Empty secret inputs retain saved values.
+The configuration validator checks presence, decryptability and known expiry
+locally; it does not authenticate against Alibaba or refresh OAuth tokens.
+Removing credentials disables imports locally; provider-side revocation must
+be performed at Alibaba. This screen cannot issue Alibaba-approved keys.
+
+Secrets are encrypted using Fernet in a dedicated integration table. Only
+configured/not-configured indicators are returned to the browser; secret values
+are absent from public settings, product records and audit events. Settings
+updates use revision checks to prevent overwriting another administrator's edits.
+All routes require super-admin authentication and the normal CSRF protection.
+
+The encryption key is created on first credential save with mode 0600 at
+`/var/lib/afribulkhub/api-credentials.key` by default. The application service user
+must be able to read it. `ABH_CREDENTIAL_KEY_FILE` can override that path. Back up
+this key privately and separately from database exports; losing it makes saved
+credentials unreadable. Do not overwrite it on redeployment. The existing deploy
+playbook preserves the data directory. A missing key causes credential updates to
+fail instead of silently replacing the key. Credentials removed from the current
+database may still exist encrypted in historical backups.

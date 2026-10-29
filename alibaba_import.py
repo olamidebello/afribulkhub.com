@@ -1,6 +1,7 @@
 """Import authorized, normalized Alibaba offers. Does not scrape or place purchases."""
 from decimal import Decimal, InvalidOperation, ROUND_HALF_UP
 import json
+import api_credentials
 
 SCHEMA = '''CREATE TABLE IF NOT EXISTS alibaba_offers(
  external_id TEXT PRIMARY KEY, product_id INTEGER NOT NULL UNIQUE REFERENCES records(id),
@@ -35,6 +36,8 @@ def fresh(c, product_id, app):
 
 def sync(c, u, payload, app):
     app.require(u['role'] == 'super_admin', 'Super administrator required')
+    _, config = api_credentials.read(c)
+    app.require(config['enabled'], 'Alibaba imports are disabled by the super administrator', 409)
     app.require(isinstance(payload, dict), 'Expected feed object', 400)
     source_time = payload.get('generated_at')
     app.require(type(source_time) is int and app.now()-86400 <= source_time <= app.now()+60,
@@ -76,10 +79,11 @@ def sync(c, u, payload, app):
                       (json.dumps(data), app.now(), previous['product_id']))
             pid = previous['product_id']; updated += 1
         else:
-            pid = app.add(c, u, 'product', data, 'published')['id']; created += 1
+            pid = app.add(c, u, 'product', data, 'published' if config['auto_publish'] else 'pending')['id']; created += 1
         c.execute('INSERT INTO alibaba_offers VALUES (?,?,?,?,?,?) ON CONFLICT(external_id) '
                   'DO UPDATE SET supplier_price=excluded.supplier_price, source_time=excluded.source_time, synced=excluded.synced',
                   (external, pid, str(offer['supplier_price']), code, source_time, app.now()))
     app.audit(c, u, 'alibaba:sync')
     return {'created': created, 'updated': updated, 'markup_percent': 30,
-            'message': 'New products are published automatically. Supplier purchasing is not connected.'}
+            'auto_publish': config['auto_publish'],
+            'message': 'Supplier purchasing is not connected.'}

@@ -9,6 +9,7 @@ HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE if (HERE/'app.py').exists() else HERE.parent))
 import app
 import alibaba_import
+import api_credentials
 
 
 def main():
@@ -23,6 +24,10 @@ def main():
     app.init_db()
     with app.connect() as c:
         c.execute('BEGIN IMMEDIATE')
+        _, config = api_credentials.read(c)
+        if not config['enabled'] or not config['scheduled_enabled']:
+            print(json.dumps({'skipped': True, 'reason': 'Scheduled imports are disabled'}))
+            return
         row = c.execute('SELECT id FROM users WHERE email=?', (args.email.lower(),)).fetchone()
         app.require(row, 'Administrator not found', 404)
         u = app.person(c, row[0])
