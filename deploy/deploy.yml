@@ -179,10 +179,17 @@
     - name: Load the updated dedicated service unit
       ansible.builtin.systemd:
         daemon_reload: true
+    - name: Inspect previous Hub failure state without requiring a loaded unit
+      ansible.builtin.command:
+        argv: [systemctl, is-failed, afribulkhub.service]
+      register: hub_previous_failure
+      changed_when: false
+      failed_when: false
     - name: Clear previous Hub startup failures after port recovery
       ansible.builtin.command:
         argv: [systemctl, reset-failed, afribulkhub.service]
       changed_when: false
+      when: hub_previous_failure.stdout | trim == 'failed'
     - name: Restart application with updated code
       ansible.builtin.systemd:
         name: afribulkhub
