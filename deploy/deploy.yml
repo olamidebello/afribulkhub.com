@@ -77,6 +77,8 @@
         mode: '0644'
       loop:
         - {src: '../app.py', dest: '{{ hub_install }}/app.py'}
+        - {src: '../alibaba_import.py', dest: '{{ hub_install }}/alibaba_import.py'}
+        - {src: '../tools/sync_alibaba.py', dest: '{{ hub_install }}/sync_alibaba.py'}
         - {src: '../requirements.txt', dest: '{{ hub_install }}/requirements.txt'}
     - name: Install website branding, legal pages and verified mobile release
       ansible.builtin.copy:
@@ -133,6 +135,46 @@
           ReadWritePaths={{ hub_data }}
           [Install]
           WantedBy=multi-user.target
+    - name: Install authorized Alibaba feed import service
+      ansible.builtin.copy:
+        dest: /etc/systemd/system/afribulkhub-alibaba.service
+        mode: '0644'
+        content: |
+          [Unit]
+          Description=Import authorized Alibaba offers with 30 percent markup
+          ConditionPathExists={{ hub_data }}/alibaba-offers.json
+          [Service]
+          Type=oneshot
+          User=afribulkhub
+          Group=afribulkhub
+          WorkingDirectory={{ hub_install }}
+          Environment=ABH_DATABASE={{ hub_data }}/hub.db
+          ExecStart={{ hub_install }}/venv/bin/python {{ hub_install }}/sync_alibaba.py --feed {{ hub_data }}/alibaba-offers.json --email {{ hub_admin_email }}
+          UMask=0077
+          NoNewPrivileges=true
+          ProtectSystem=strict
+          ProtectHome=true
+          PrivateTmp=true
+          ReadWritePaths={{ hub_data }}
+    - name: Install Alibaba feed import timer
+      ansible.builtin.copy:
+        dest: /etc/systemd/system/afribulkhub-alibaba.timer
+        mode: '0644'
+        content: |
+          [Unit]
+          Description=Check authorized Alibaba offer feed every 15 minutes
+          [Timer]
+          OnBootSec=2min
+          OnCalendar=*:0/15
+          Persistent=true
+          [Install]
+          WantedBy=timers.target
+    - name: Enable authorized feed import scheduling
+      ansible.builtin.systemd:
+        name: afribulkhub-alibaba.timer
+        state: started
+        enabled: true
+        daemon_reload: true
     - name: Load the updated dedicated service unit
       ansible.builtin.systemd:
         daemon_reload: true

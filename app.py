@@ -1,5 +1,6 @@
 """Africa Bulk Hub. WSGI application; durable SQLite, explicit access checks."""
 import argparse
+import alibaba_import
 from decimal import Decimal, ROUND_HALF_UP
 from functools import lru_cache
 import base64
@@ -52,6 +53,7 @@ def connect():
 def init_db():
     with connect() as c:
         c.executescript(SCHEMA)
+        alibaba_import.init(c)
         c.execute("BEGIN IMMEDIATE")
         for k,v in DEFAULTS.items():
             c.execute('INSERT OR IGNORE INTO settings VALUES (?,?)',(k,json.dumps(v)))
@@ -307,6 +309,7 @@ def api(c,env,method,path,d,q):
         orders=[]
         for item in items:
             p=record(c,item['product_id']);require(c.execute('SELECT status FROM tenants WHERE id=?',(p['tenant_id'],)).fetchone()[0]=='active','Supplier is unavailable',409);require(p['status']=='published','A cart item is no longer available',409)
+            alibaba_import.fresh(c,p['id'],__import__(__name__))
             pd=json.loads(p['data']);qty=item['quantity'];require(pd['moq']<=qty<=pd['stock'],'Stock or MOQ has changed. Update your cart.',409)
             pd['stock']-=qty;c.execute('UPDATE records SET data=?,updated=? WHERE id=?',(json.dumps(pd),now(),p['id']))
             orders.append(add(c,u,'order',{'product_id':p['id'],'title':pd['title'],'quantity':qty,'unit_price':pd['price'],'total':total_price(pd['price'],qty,pd['currency']),'currency':pd['currency'],'delivery_address':address,'payment_status':'unpaid','stock_reserved':True},'pending',p['tenant_id']))
@@ -361,6 +364,7 @@ def api(c,env,method,path,d,q):
         if kind=='order':
             target=record(c,int(data.get('product_id',0)));require(c.execute('SELECT status FROM tenants WHERE id=?',(target['tenant_id'],)).fetchone()[0]=='active','Supplier is unavailable',409);require(target['kind']=='product' and target['status']=='published','Product unavailable',400)
             require(target['tenant_id']!=u['tenant_id'],'Cannot order your own product',400)
+            alibaba_import.fresh(c,target['id'],__import__(__name__))
             p=json.loads(target['data']);qty=number(data,'quantity',p['moq']);require(qty.is_integer(),'Quantity must be a whole number',400)
             require(qty<=float(p['stock']),'Requested quantity exceeds available stock',400)
             p['stock']=float(p['stock'])-qty;c.execute('UPDATE records SET data=?,updated=? WHERE id=?',(json.dumps(p),now(),target['id']))
@@ -395,6 +399,7 @@ def api(c,env,method,path,d,q):
         elif 'data' in d:
             require((own or admin) and r['kind'] in {'product','rfq','job','address','campaign'},'Record cannot be edited')
             require(isinstance(d['data'],dict),'Expected record fields object',400)
+            require(not c.execute('SELECT 1 FROM alibaba_offers WHERE product_id=?',(r['id'],)).fetchone(),'Refresh imported products through Alibaba import',409)
             previous=json.loads(r['data']);incoming=dict(d['data']);incoming.setdefault('currency',previous.get('currency','USD'))
             require(incoming.get('currency')==previous.get('currency','USD'),'Cannot change a published record currency; create a new listing or request',409)
             data=sanitize(r['kind'],incoming)
@@ -446,6 +451,11 @@ def api(c,env,method,path,d,q):
         audit(c,u,'team:add',uid);return person(c,uid),extra
     if path.startswith('/api/admin'):
         require(u['role']=='super_admin','Super administrator required')
+        if path=='/api/admin/alibaba' and method=='GET':
+            return {'markup_percent':30,'imported_products':c.execute('SELECT COUNT(*) FROM alibaba_offers').fetchone()[0],'last_sync':c.execute('SELECT MAX(synced) FROM alibaba_offers').fetchone()[0],'live_api_connected':False},extra
+        if path=='/api/admin/alibaba/import':
+            require(method=='POST','Method not allowed',405)
+            return alibaba_import.sync(c,u,d,__import__(__name__)),extra
         if path=='/api/admin/overview' and method=='GET':
             return {'users':c.execute('SELECT COUNT(*) FROM users').fetchone()[0],'tenants':c.execute('SELECT COUNT(*) FROM tenants').fetchone()[0],'orders':c.execute("SELECT COUNT(*) FROM records WHERE kind='order'").fetchone()[0],'pending':c.execute("SELECT COUNT(*) FROM records WHERE status='pending'").fetchone()[0]},extra
         if path=='/api/admin/users' and method=='GET':return {'items':[person(c,r[0]) for r in c.execute('SELECT id FROM users ORDER BY id DESC')]},extra
