@@ -76,10 +76,10 @@ def sync(c, u, payload, app):
                       (json.dumps(data), app.now(), previous['product_id']))
             pid = previous['product_id']; updated += 1
         else:
-            pid = app.add(c, u, 'product', data, 'pending')['id']; created += 1
+            pid = app.add(c, u, 'product', data, 'published')['id']; created += 1
         c.execute('INSERT INTO alibaba_offers VALUES (?,?,?,?,?,?) ON CONFLICT(external_id) '
                   'DO UPDATE SET supplier_price=excluded.supplier_price, source_time=excluded.source_time, synced=excluded.synced',
                   (external, pid, str(offer['supplier_price']), code, source_time, app.now()))
     app.audit(c, u, 'alibaba:sync')
     return {'created': created, 'updated': updated, 'markup_percent': 30,
-            'message': 'New products await moderation. Supplier purchasing is not connected.'}
+            'message': 'New products are published automatically. Supplier purchasing is not connected.'}

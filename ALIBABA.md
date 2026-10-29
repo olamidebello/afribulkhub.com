@@ -9,8 +9,9 @@ never from the previous selling price. Existing orders keep their agreed price.
 ## Current capabilities
 
 Super administrators can use **Platform operations → Alibaba imports** to import
-authorized normalized JSON. New listings enter moderation. Subsequent imports
-update the same listing's price and available stock, preserving moderation status.
+authorized normalized JSON. New listings publish automatically, as requested. Subsequent imports
+update the same listing's price and available stock, preserving its existing status.
+Archived or rejected listings are not automatically reactivated.
 Supplier costs and offer identifiers are stored in a private table, outside the
 public product data. Stable identifiers must distinguish supplier, product, SKU
 and any fixed quantity tier. Do not import a negotiable price range as a fixed offer.

@@ -31,9 +31,12 @@ class AlibabaTests(unittest.TestCase):
         self.assertEqual(status,200); self.assertEqual(result['created'],1)
         rows=self.admin.req('/api/records?kind=product')[1]['items']
         self.assertEqual(rows[0]['data']['price'],130)
-        self.assertEqual(rows[0]['status'],'pending')
+        self.assertEqual(rows[0]['status'],'published')
         self.assertNotIn('supplier_price',json.dumps(rows))
-        self.assertEqual(Client().req('/api/records?kind=product')[1]['items'],[])
+        public = Client().req('/api/records?kind=product')[1]['items']
+        self.assertEqual(len(public),1)
+        self.assertEqual(public[0]['data']['price'],130)
+        self.assertNotIn('supplier_price',json.dumps(public))
         self.assertEqual(self.admin.req('/api/records/'+str(rows[0]['id']),'PATCH',{'data':rows[0]['data']})[0],409)
 
     def test_sync_preserves_orders_and_does_not_compound(self):
