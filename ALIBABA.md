@@ -143,3 +143,45 @@ After installation, sign in and open `https://afribulkhub.com/#alibaba`.
 The API adapter and an approved product feed are still required to populate
 real Alibaba listings; installing this playbook does not manufacture credentials
 or supplier inventory.
+
+
+## Selected hosting server: 181.214.149.146
+
+Use `deploy/install-181.yml` for the selected production host. It verifies the
+server interface address before installation and then runs the shared pull,
+backup, dependency installation, migration, restart and HTTPS checks. It supports
+both first installation and repeated updates. It does not migrate data from
+154.16.170.86 or change DNS. Existing data on the selected host is preserved.
+
+Connect to the correct server first:
+
+```bash
+ssh root@181.214.149.146
+```
+
+Then run:
+
+```bash
+apt-get update
+apt-get install -y git ansible
+ansible-pull -U https://github.com/olamidebello/afribulkhub.com.git \
+  -C alibaba-import-markup -i localhost, -c local \
+  -d /opt/afribulkhub-alibaba-bootstrap deploy/install-181.yml
+```
+
+Repeat the same command whenever an update is needed. It always pulls the latest
+selected branch and performs installation and health checks. No unattended code
+update timer is installed by this entrypoint; the existing 15-minute timer imports
+product feeds only.
+
+Alternatively, from a checkout on another administration machine with Ansible,
+run over SSH using the included inventory:
+
+```bash
+ansible-playbook -i deploy/hosts-181.ini deploy/install-181.yml --ask-pass
+```
+
+SSH public-key authentication can omit `--ask-pass`. Password-based Ansible SSH
+requires `sshpass` on the administration machine. Standard SSH host-key checks
+remain enabled. The inventory contains no password. After installation visit
+`https://afribulkhub.com/#alibaba` and provision the approved API credentials.
