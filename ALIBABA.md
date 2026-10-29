@@ -110,3 +110,36 @@ credentials unreadable. Do not overwrite it on redeployment. The existing deploy
 playbook preserves the data directory. A missing key causes credential updates to
 fail instead of silently replacing the key. Credentials removed from the current
 database may still exist encrypted in historical backups.
+
+
+## Pull and install on the hosting server
+
+Run as root on the server currently hosting afribulkhub.com. This installs the
+Alibaba feature branch directly, so it does not depend on PR 1 being merged.
+
+```bash
+apt-get update
+apt-get install -y git ansible
+ansible-pull -U https://github.com/olamidebello/afribulkhub.com.git \
+  -C alibaba-import-markup -i localhost, -c local \
+  -d /opt/afribulkhub-alibaba-bootstrap deploy/pull-and-install.yml
+```
+
+Repeat the same command to update. The playbook pulls into a separate source
+checkout, backs up the existing SQLite database, preserves accounts and the
+credential encryption key, installs Python dependencies, initializes new tables,
+selects an available backend port, restarts the service, checks Nginx/HTTPS and
+verifies the feed timer and credential decryption. Source edits cause Git to stop
+rather than being discarded. The Apps Store is not modified by this entrypoint.
+Check normal Ansible output for any failing task; no server execution is implied
+by committing this script.
+
+After merging PR 1, change `-C alibaba-import-markup` to `-C main` and append
+`-e hub_version=main` to install from main. The default domain, paths and admin
+email can also be overridden with Ansible extra variables. Run the command only
+on the intended hosting server; it does not change DNS.
+
+After installation, sign in and open `https://afribulkhub.com/#alibaba`.
+The API adapter and an approved product feed are still required to populate
+real Alibaba listings; installing this playbook does not manufacture credentials
+or supplier inventory.

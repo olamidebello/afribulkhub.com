@@ -21,3 +21,4 @@ jobs:
       - run: pip install ansible-core==2.18.2
       - run: ansible-playbook -i localhost, deploy/deploy.yml --syntax-check
       - run: ansible-playbook -i localhost, deploy/pull-and-deploy.yml --syntax-check
+      - run: ansible-playbook -i localhost, deploy/pull-and-install.yml --syntax-check
